@@ -440,3 +440,60 @@ test("a stale 'not paired' flag replayed from BlueZ's cache does not throw away 
     false,
   );
 });
+
+test("the first successful read is logged at info level with the values", async (t) => {
+  const { sensor, device, lines } = setup(t);
+  sensor.handleAdvertisement(advertisement(device));
+  await flush();
+
+  assert.ok(
+    lines.info.includes(
+      "[Schlafzimmer] Receiving readings: 22.4 °C, 60.5 %, battery 86 %.",
+    ),
+  );
+});
+
+test("after failures, the first successful read says so; later successes stay quiet", async (t) => {
+  const device = createFakeDevice();
+  const { sensor, lines } = setup(t, {
+    device,
+    store: storeFromPreviousRun(device),
+  });
+  sensor.handleAdvertisement(advertisement(device));
+  await flush();
+  device.failNextReads = 2;
+  t.mock.timers.tick(10 * 60 * 1000); // poll → fails
+  await flush();
+  t.mock.timers.tick(60 * 1000); // retry → fails
+  await flush();
+  t.mock.timers.tick(60 * 1000); // retry → succeeds
+  await flush();
+  t.mock.timers.tick(10 * 60 * 1000); // next poll → succeeds
+  await flush();
+
+  const ok = lines.info.filter((l) => l.includes("Readings OK again"));
+  assert.deepEqual(ok, [
+    "[Schlafzimmer] Readings OK again after 2 failed attempts: 22.4 °C, 60.5 %.",
+  ]);
+});
+
+test("after five failed reads in a row the log suggests likely causes, once", async (t) => {
+  const device = createFakeDevice();
+  const { sensor, lines } = setup(t, {
+    device,
+    store: storeFromPreviousRun(device),
+    config: { timeout: 600 },
+  });
+  device.failNextReads = 7;
+  sensor.handleAdvertisement(advertisement(device));
+  await flush();
+  for (let i = 0; i < 7; i += 1) {
+    t.mock.timers.tick(60 * 1000);
+    await flush();
+  }
+
+  assert.equal(
+    lines.warn.filter((l) => l.includes("Other Bluetooth plugins")).length,
+    1,
+  );
+});

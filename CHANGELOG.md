@@ -1,4 +1,11 @@
 # Changelog
+## 0.1.0-beta.7
+
+**Beta.**
+
+* The first successful read is now logged (`Receiving readings: 22.4 °C, 60.5 %, battery 86 %`), and so is recovery after failed reads (`Readings OK again after 2 failed attempts: …`). Previously a working sensor was silent unless debug logging was on, so a single failure couldn't be told apart from a permanent one.
+* After five failed reads in a row, the log names likely causes: other Bluetooth plugins sharing the adapter, a stuck device, or the need for a separate adapter.
+
 ## 0.1.0-beta.6
 
 **Beta.**
