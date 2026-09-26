@@ -11,6 +11,7 @@ Some sensors only speak HomeKit over Bluetooth (for example the Qingping Temp & 
 - Homebridge **2.4.0** or later, with Matter
 - A Bluetooth adapter the Homebridge host can use (the Raspberry Pi's built-in one works)
 - Node.js 20, 22 or 24
+- BlueZ (the standard Linux Bluetooth service) running, and the Homebridge user allowed to use it: on Raspberry Pi OS the default `pi` user is; otherwise add it to the `bluetooth` group (`sudo usermod -aG bluetooth <user>`, then restart Homebridge)
 
 ## Setup
 
@@ -42,11 +43,13 @@ The pairing keys are stored in `<Homebridge storage>/homekit-ble-matter/`. Keep 
 | `devices[].setupCode` | | 8-digit HomeKit code (`123-45-678`, `12345678` or `1234 5678`). Only needed for the first pairing. |
 | `pollInterval` | `10` | Minutes between reads (also per device). |
 | `timeout` | `60` | Minutes without a successful read before values are reported as unavailable (also per device). |
+| `bluetoothBinding` | `dbus` | How the adapter is accessed: `dbus` (BlueZ, recommended) or `hci` (raw HCI, needs root or network capabilities). |
 
 ## How it works
 
 - One Bluetooth scan listens to all HomeKit advertisements. When a device's advertised state number changes (HomeKit devices bump it when a value changes), it's read, at most once every 5 minutes. On top of that it's polled every `pollInterval` minutes.
 - Each read is a short encrypted Bluetooth connection. Connections run one at a time.
+- Bluetooth goes through BlueZ over D-Bus (noble 2). The underlying library, hap-controller, normally uses raw HCI (noble 1), which in testing couldn't hold a connection to a HomeKit sensor on a Raspberry Pi; this plugin hands it noble 2 instead.
 - A device measuring both temperature and humidity becomes **one** Matter endpoint, so controllers that list every endpoint separately (IKEA Dirigera) show one device.
 - **A factory reset gives a HomeKit device a new DeviceID.** Replace the old DeviceID in the config with the new one from the log. If a configured device isn't seen within two minutes of startup, the log says so and names any unconfigured device available to pair as the likely new DeviceID.
 - If pairing is removed without a reset (the DeviceID stays the same), the plugin notices and pairs again with the configured setup code.
@@ -56,6 +59,7 @@ The pairing keys are stored in `<Homebridge storage>/homekit-ble-matter/`. Keep 
 
 - **Pairing keeps failing / the device is no longer found:** Bluetooth sensors can get stuck after a failed connection attempt: they stop advertising and refuse connections. Take the battery out for about 10 seconds and put it back (a restart, *not* a factory reset, which would change the DeviceID). The plugin retries by itself.
 - **"Already paired with another HomeKit controller":** remove the device from Apple Home first.
+- **"Bluetooth via BlueZ (D-Bus) is not available":** start the bluetooth service (`sudo systemctl start bluetooth`) and make sure the Homebridge user is in the `bluetooth` group, or switch Bluetooth Access to raw HCI.
 - **"Not seen since startup":** the device is out of range, out of battery, or was factory-reset and has a new DeviceID (the warning names the likely one).
 
 ## Known limitations

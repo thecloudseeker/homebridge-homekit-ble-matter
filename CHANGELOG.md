@@ -1,4 +1,12 @@
 # Changelog
+## 0.1.0-beta.3
+
+**Beta.**
+
+* Changed Bluetooth access to BlueZ over D-Bus (noble 2) instead of raw HCI (noble 1, which hap-controller uses by default). On a Raspberry Pi, raw HCI could not hold a connection to a Qingping CGG1H at all (the sensor terminated every link, so pairing always timed out), while BlueZ connected every time. It also needs no root or raw-socket capabilities and doesn't conflict with the system's bluetooth service.
+* Added **Bluetooth Access** (`bluetoothBinding`: `dbus` default, `hci` for the old behaviour).
+* If BlueZ isn't reachable (e.g. no D-Bus in a container), the plugin now logs a clear error instead of crashing the child bridge.
+
 ## 0.1.0-beta.2
 
 **Beta.**

@@ -58,6 +58,16 @@
         "default": 60,
         "minimum": 5,
         "description": "After this long without a successful read, readings are reported as unavailable."
+      },
+      "bluetoothBinding": {
+        "title": "Bluetooth Access",
+        "type": "string",
+        "default": "dbus",
+        "oneOf": [
+          { "title": "BlueZ (D-Bus) - recommended", "enum": ["dbus"] },
+          { "title": "Raw HCI (needs root or network capabilities)", "enum": ["hci"] }
+        ],
+        "description": "How the plugin talks to the Bluetooth adapter. BlueZ is more reliable for connections; raw HCI is the old behaviour of the underlying library."
       }
     }
   },
@@ -77,7 +87,7 @@
       "type": "fieldset",
       "title": "Defaults",
       "expandable": true,
-      "items": ["pollInterval", "timeout"]
+      "items": ["pollInterval", "timeout", "bluetoothBinding"]
     }
   ]
 }
