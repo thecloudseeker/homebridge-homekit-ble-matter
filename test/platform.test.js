@@ -26,12 +26,17 @@ class FakeAPI extends EventEmitter {
 
 function setup(
   t,
-  { config, matterEnabled = true, device = createFakeDevice() } = {},
+  {
+    config,
+    matterEnabled = true,
+    device = createFakeDevice(),
+    withNoble = false,
+  } = {},
 ) {
   t.mock.timers.enable({ apis: ["setTimeout", "setInterval", "Date"] });
   const storagePath = fs.mkdtempSync(path.join(os.tmpdir(), "hkblematter-"));
   t.after(() => fs.rmSync(storagePath, { recursive: true, force: true }));
-  const hap = createFakeHap(device);
+  const hap = createFakeHap(device, { withNoble });
   const { HomeKitBleMatterPlatform } = require("../lib/platform")(
     {},
     {
@@ -271,4 +276,25 @@ test("after shutdown, a finishing connection does not restart scanning", async (
   await flush();
 
   assert.equal(platform.discovery.scanning, false);
+});
+
+test("cache replays right after a scan start don't trigger pairing; the first live advertisement does", async (t) => {
+  const { platform, api, device } = setup(t, { withNoble: true });
+  api.emit("didFinishLaunching");
+  const noble = platform.hap.noble;
+  const adv = advertisement(device);
+
+  // The replay burst: scan starts, BlueZ's cached copy is reported at once.
+  noble.emit("scanStart");
+  noble.emit("discover", adv.peripheral);
+  platform.discovery.emit("serviceUp", adv);
+  await flush();
+  assert.equal(device.calls.includes("pairSetup"), false);
+
+  // Seconds later the sensor is actually heard.
+  t.mock.timers.tick(3000);
+  noble.emit("discover", adv.peripheral);
+  await flush();
+  assert.equal(device.paired, true);
+  assert.equal(api.matter.accessories.size, 1);
 });

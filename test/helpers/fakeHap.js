@@ -112,12 +112,18 @@ function advertisement(device, overrides = {}) {
     GSN: 1,
     CN: 1,
     availableToPair: !device.paired,
-    peripheral: { address: "cb:81:d1:b0:00:a5" },
+    peripheral: { id: "cb81d1b000a5", address: "cb:81:d1:b0:00:a5" },
     ...overrides,
   };
 }
 
-function createFakeHap(device) {
+// `withNoble`: also expose a fake noble instance (scanStart/discover events),
+// as loadHap does, so the platform's live-advertisement tracking is active.
+function createFakeHap(device, { withNoble = false } = {}) {
+  // Like noble's D-Bus binding: starting/stopping a scan emits
+  // scanStart/scanStop on the noble instance.
+  const noble = withNoble ? new EventEmitter() : undefined;
+
   class BLEDiscovery extends EventEmitter {
     constructor() {
       super();
@@ -128,11 +134,13 @@ function createFakeHap(device) {
       this.started = true;
       this.scanning = true;
       device.calls.push("scan:start");
+      noble?.emit("scanStart");
     }
     stop() {
       this.stopped = true;
       this.scanning = false;
       device.calls.push("scan:stop");
+      noble?.emit("scanStop");
     }
     async getPairMethod() {
       return 0;
@@ -202,6 +210,7 @@ function createFakeHap(device) {
     GattClient,
     characteristicFromUuid: (uuid) => NAMES[uuid] ?? uuid,
     serviceFromUuid: (uuid) => NAMES[uuid] ?? uuid,
+    noble,
   };
 }
 

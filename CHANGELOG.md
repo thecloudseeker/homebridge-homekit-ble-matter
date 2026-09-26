@@ -1,4 +1,11 @@
 # Changelog
+## 0.1.0-beta.6
+
+**Beta.**
+
+* Fixed connection attempts to devices that aren't there: whenever a scan starts, BlueZ re-reports every device in its cache with its last stored advertisement (e.g. a sensor without battery). Setup now waits until the device is actually heard advertising, and starts as soon as it is - without counting failures or backing off.
+* Protected the pairing keys against those cached replays: an old "not paired" advertisement from BlueZ's cache is no longer mistaken for a factory reset (which would have deleted working keys). Only a live advertisement counts.
+
 ## 0.1.0-beta.5
 
 **Beta.**

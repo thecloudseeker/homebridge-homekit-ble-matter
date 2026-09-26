@@ -13,7 +13,10 @@ const {
 
 const DEVICE_ID = "41:21:14:E5:C2:25";
 
-function setup(t, { device = createFakeDevice(), config = {}, store } = {}) {
+function setup(
+  t,
+  { device = createFakeDevice(), config = {}, store, lastSeenAt } = {},
+) {
   t.mock.timers.enable({ apis: ["setTimeout", "setInterval", "Date"] });
   const hap = createFakeHap(device);
   const { log, lines } = createRecordingLog();
@@ -33,6 +36,7 @@ function setup(t, { device = createFakeDevice(), config = {}, store } = {}) {
     queue: new ConnectionQueue(),
     onReady: (database, info) => ready.push({ database, info }),
     onReadings: (values) => readings.push(values),
+    ...(lastSeenAt ? { lastSeenAt } : {}),
   });
   t.after(() => sensor.stop());
   return { sensor, device, lines, ready, readings, store: sensor.store };
@@ -392,5 +396,47 @@ test("repeated setup failures back off (1, 2, 5, 10 min) and suggest restarting 
   assert.equal(
     lines.warn.filter((l) => l.includes("take the battery out")).length,
     1,
+  );
+});
+
+test("a device known only from BlueZ's cache is not connected to: it waits, then pairs once it's heard live", async (t) => {
+  let seen = null;
+  const { sensor, device, lines } = setup(t, { lastSeenAt: () => seen });
+
+  sensor.handleAdvertisement(advertisement(device));
+  await flush();
+  assert.deepEqual(device.calls, [], "no connection attempt");
+  assert.equal(lines.warn.length, 0, "waiting is not a failure");
+
+  seen = Date.now();
+  sensor.handlePresence();
+  await flush();
+  assert.equal(device.paired, true);
+});
+
+test("a stale 'not paired' flag replayed from BlueZ's cache does not throw away the pairing keys", async (t) => {
+  const device = createFakeDevice();
+  let seen = Date.now();
+  const { sensor, store, lines } = setup(t, {
+    device,
+    store: storeFromPreviousRun(device),
+    lastSeenAt: () => seen,
+  });
+  sensor.handleAdvertisement(advertisement(device));
+  await flush();
+
+  // Ten seconds later a cached copy of an old, unpaired advertisement shows up.
+  t.mock.timers.tick(10 * 1000);
+  seen = Date.now() - 10 * 1000;
+  sensor.handleAdvertisement(advertisement(device, { availableToPair: true }));
+  await flush();
+
+  assert.equal(
+    store.data.get(DEVICE_ID).pairingData.iOSDevicePairingID,
+    "ctrl",
+  );
+  assert.equal(
+    lines.warn.some((l) => l.includes("no longer paired")),
+    false,
   );
 });
