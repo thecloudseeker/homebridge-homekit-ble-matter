@@ -132,7 +132,10 @@ test("the pairing survives a restart: the second run neither pairs nor re-reads 
   first.device.calls.length = 0;
   platform.discovery.emit("serviceUp", advertisement(first.device));
   await flush();
-  assert.deepEqual(first.device.calls, ["read:257,145,59,61"]);
+  assert.deepEqual(
+    first.device.calls.filter((c) => !c.startsWith("scan:")),
+    ["read:257,145,59,61"],
+  );
 });
 
 test("unconfigured HomeKit BLE devices are announced once with their DeviceID", (t) => {
@@ -229,4 +232,43 @@ test("a configured sensor that was seen is not reported as unseen", async (t) =>
     lines.warn.some((l) => l.includes("Not seen since startup")),
     false,
   );
+});
+
+test("scanning is paused for every connection and resumed afterwards, as BlueZ aborts connections while discovery runs", async (t) => {
+  const { platform, api, device } = setup(t);
+  api.emit("didFinishLaunching");
+  // Like BlueZ: any connection attempt while scanning fails.
+  device.scanningDuringConnect = () => platform.discovery.scanning;
+
+  platform.discovery.emit("serviceUp", advertisement(device));
+  await flush();
+
+  assert.equal(device.paired, true, "pairing must not run while scanning");
+  assert.equal(api.matter.accessories.size, 1);
+  assert.equal(platform.discovery.scanning, true, "scanning resumes");
+  const calls = device.calls.filter((c) => c !== "getAccessories");
+  const pairAt = calls.indexOf("pairSetup");
+  assert.equal(calls[pairAt - 1], "scan:stop");
+});
+
+test("scanning resumes even when a connection fails", async (t) => {
+  const device = createFakeDevice({ failNextPairs: 1 });
+  const { platform, api } = setup(t, { device });
+  api.emit("didFinishLaunching");
+
+  platform.discovery.emit("serviceUp", advertisement(device));
+  await flush();
+
+  assert.equal(device.paired, false);
+  assert.equal(platform.discovery.scanning, true);
+});
+
+test("after shutdown, a finishing connection does not restart scanning", async (t) => {
+  const { platform, api, device } = setup(t);
+  api.emit("didFinishLaunching");
+  platform.discovery.emit("serviceUp", advertisement(device));
+  api.emit("shutdown");
+  await flush();
+
+  assert.equal(platform.discovery.scanning, false);
 });

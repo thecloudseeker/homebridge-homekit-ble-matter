@@ -48,7 +48,7 @@ The pairing keys are stored in `<Homebridge storage>/homekit-ble-matter/`. Keep 
 ## How it works
 
 - One Bluetooth scan listens to all HomeKit advertisements. When a device's advertised state number changes (HomeKit devices bump it when a value changes), it's read, at most once every 5 minutes. On top of that it's polled every `pollInterval` minutes.
-- Each read is a short encrypted Bluetooth connection. Connections run one at a time.
+- Each read is a short encrypted Bluetooth connection. Connections run one at a time, and scanning pauses while connected (BlueZ aborts connection attempts during a scan).
 - Bluetooth goes through BlueZ over D-Bus (noble 2). The underlying library, hap-controller, normally uses raw HCI (noble 1), which in testing couldn't hold a connection to a HomeKit sensor on a Raspberry Pi; this plugin hands it noble 2 instead.
 - A device measuring both temperature and humidity becomes **one** Matter endpoint, so controllers that list every endpoint separately (IKEA Dirigera) show one device.
 - **A factory reset gives a HomeKit device a new DeviceID.** Replace the old DeviceID in the config with the new one from the log. If a configured device isn't seen within two minutes of startup, the log says so and names any unconfigured device available to pair as the likely new DeviceID.

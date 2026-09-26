@@ -126,9 +126,13 @@ function createFakeHap(device) {
     }
     start() {
       this.started = true;
+      this.scanning = true;
+      device.calls.push("scan:start");
     }
     stop() {
       this.stopped = true;
+      this.scanning = false;
+      device.calls.push("scan:stop");
     }
     async getPairMethod() {
       return 0;
@@ -148,6 +152,9 @@ function createFakeHap(device) {
     }
     async pairSetup(pin) {
       device.calls.push("pairSetup");
+      if (device.scanningDuringConnect?.()) {
+        throw "le-connection-abort-by-local";
+      }
       if (device.failNextPairs > 0) {
         device.failNextPairs -= 1;
         throw "Timeout";
@@ -170,6 +177,9 @@ function createFakeHap(device) {
     }
     async getCharacteristics(list) {
       device.calls.push(`read:${list.map((a) => a.iid).join(",")}`);
+      if (device.scanningDuringConnect?.()) {
+        throw "le-connection-abort-by-local";
+      }
       this.requirePairing();
       if (device.failNextReads > 0) {
         device.failNextReads -= 1;

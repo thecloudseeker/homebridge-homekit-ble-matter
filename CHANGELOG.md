@@ -1,4 +1,10 @@
 # Changelog
+## 0.1.0-beta.5
+
+**Beta.**
+
+* Fixed pairing failing with `le-connection-abort-by-local`: BlueZ aborts connection attempts while a Bluetooth scan runs on the same adapter, so scanning is now paused during every connection (pairing, reading the structure, reading values) and resumed afterwards.
+
 ## 0.1.0-beta.4
 
 **Beta.**
