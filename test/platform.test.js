@@ -190,3 +190,43 @@ test("shutdown stops discovery", (t) => {
   api.emit("shutdown");
   assert.equal(platform.discovery.stopped, true);
 });
+
+test("a configured sensor unseen after two minutes is reported, naming an unconfigured pairable sensor as its likely new DeviceID", async (t) => {
+  const { platform, api, lines } = setup(t);
+  api.emit("didFinishLaunching");
+  const reset = createFakeDevice({ deviceId: "E4:DB:61:5C:0E:27" });
+  platform.discovery.emit("serviceUp", advertisement(reset));
+
+  t.mock.timers.tick(2 * 60 * 1000);
+
+  const warning = lines.warn.find((l) => l.includes("Not seen since startup"));
+  assert.ok(warning.includes("DeviceID 41:21:14:E5:C2:25"));
+  assert.ok(
+    warning.includes("likely E4:DB:61:5C:0E:27 ('Qingping Temp RH H')"),
+  );
+});
+
+test("without a pairable candidate the unseen warning gives no DeviceID hint", (t) => {
+  const { api, lines } = setup(t);
+  api.emit("didFinishLaunching");
+
+  t.mock.timers.tick(2 * 60 * 1000);
+
+  const warning = lines.warn.find((l) => l.includes("Not seen since startup"));
+  assert.ok(warning);
+  assert.equal(warning.includes("factory reset"), false);
+});
+
+test("a configured sensor that was seen is not reported as unseen", async (t) => {
+  const { platform, api, lines, device } = setup(t);
+  api.emit("didFinishLaunching");
+  platform.discovery.emit("serviceUp", advertisement(device));
+  await flush();
+
+  t.mock.timers.tick(2 * 60 * 1000);
+
+  assert.equal(
+    lines.warn.some((l) => l.includes("Not seen since startup")),
+    false,
+  );
+});

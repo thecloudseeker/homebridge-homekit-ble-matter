@@ -97,6 +97,8 @@ function createFakeDevice(overrides = {}) {
       61: 0,
     },
     failNextReads: 0,
+    // hap-controller rejects BLE timeouts with a plain string, not an Error.
+    failNextPairs: 0,
     calls: [],
     ...overrides,
   };
@@ -146,6 +148,10 @@ function createFakeHap(device) {
     }
     async pairSetup(pin) {
       device.calls.push("pairSetup");
+      if (device.failNextPairs > 0) {
+        device.failNextPairs -= 1;
+        throw "Timeout";
+      }
       if (pin !== device.setupCode) {
         throw new Error("M4: authentication error");
       }
@@ -167,7 +173,7 @@ function createFakeHap(device) {
       this.requirePairing();
       if (device.failNextReads > 0) {
         device.failNextReads -= 1;
-        throw new Error("Timeout");
+        throw "Timeout";
       }
       return {
         characteristics: list.map((address) => ({

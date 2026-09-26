@@ -31,7 +31,7 @@ Some sensors only speak HomeKit over Bluetooth (for example the Qingping Temp & 
    ```
 5. Restart. The plugin pairs, reads the device's structure and registers one Matter device. Add the bridge to your Matter controller with the code from the child bridge's Matter settings.
 
-The pairing keys are stored in `<Homebridge storage>/homekit-ble-matter/`. Keep that folder: without it the device has to be factory-reset before it can be paired again.
+The pairing keys are stored in `<Homebridge storage>/homekit-ble-matter/`. Keep that folder: without it the device has to be factory-reset before it can be paired again (and gets a new DeviceID).
 
 ## Configuration
 
@@ -48,7 +48,15 @@ The pairing keys are stored in `<Homebridge storage>/homekit-ble-matter/`. Keep 
 - One Bluetooth scan listens to all HomeKit advertisements. When a device's advertised state number changes (HomeKit devices bump it when a value changes), it's read, at most once every 5 minutes. On top of that it's polled every `pollInterval` minutes.
 - Each read is a short encrypted Bluetooth connection. Connections run one at a time.
 - A device measuring both temperature and humidity becomes **one** Matter endpoint, so controllers that list every endpoint separately (IKEA Dirigera) show one device.
-- If a device is factory-reset, the plugin notices (it advertises as unpaired again) and pairs again with the configured setup code.
+- **A factory reset gives a HomeKit device a new DeviceID.** Replace the old DeviceID in the config with the new one from the log. If a configured device isn't seen within two minutes of startup, the log says so and names any unconfigured device available to pair as the likely new DeviceID.
+- If pairing is removed without a reset (the DeviceID stays the same), the plugin notices and pairs again with the configured setup code.
+- A failed read is retried after a minute; a failed pairing after 1, 2, 5, then every 10 minutes.
+
+## Troubleshooting
+
+- **Pairing keeps failing / the device is no longer found:** Bluetooth sensors can get stuck after a failed connection attempt: they stop advertising and refuse connections. Take the battery out for about 10 seconds and put it back (a restart, *not* a factory reset, which would change the DeviceID). The plugin retries by itself.
+- **"Already paired with another HomeKit controller":** remove the device from Apple Home first.
+- **"Not seen since startup":** the device is out of range, out of battery, or was factory-reset and has a new DeviceID (the warning names the likely one).
 
 ## Known limitations
 

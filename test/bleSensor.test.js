@@ -329,3 +329,68 @@ test("stop() ends polling", async (t) => {
 
   assert.equal(readings.length, 1);
 });
+
+test("a failed pairing is retried after a minute, without waiting for the advertisement to change", async (t) => {
+  const device = createFakeDevice({ failNextPairs: 1 });
+  const { sensor, lines, ready } = setup(t, { device });
+
+  sensor.handleAdvertisement(advertisement(device));
+  await flush();
+  assert.equal(device.paired, false);
+
+  t.mock.timers.tick(60 * 1000);
+  await flush();
+
+  assert.equal(device.paired, true);
+  assert.equal(ready.length, 1);
+  const failure = lines.warn.find((l) => l.includes("Setup failed"));
+  assert.ok(
+    failure.endsWith("retrying in 1 min: Timeout"),
+    `hap-controller's plain-string rejection must be readable, got: ${failure}`,
+  );
+});
+
+test("a failed read with a plain-string rejection is reported readably", async (t) => {
+  const device = createFakeDevice();
+  const { sensor, lines } = setup(t, {
+    device,
+    store: storeFromPreviousRun(device),
+  });
+  device.failNextReads = 1;
+
+  sensor.handleAdvertisement(advertisement(device));
+  await flush();
+
+  assert.ok(lines.warn.some((l) => l.endsWith("Reading failed: Timeout")));
+});
+
+test("repeated setup failures back off (1, 2, 5, 10 min) and suggest restarting the sensor after three", async (t) => {
+  const device = createFakeDevice({ failNextPairs: 5 });
+  const { sensor, lines } = setup(t, { device });
+  const attempts = () => device.calls.filter((c) => c === "pairSetup").length;
+
+  sensor.handleAdvertisement(advertisement(device));
+  await flush();
+  assert.equal(attempts(), 1);
+
+  for (const [minutes, expected] of [
+    [1, 2],
+    [2, 3],
+    [5, 4],
+    [10, 5],
+    [10, 6],
+  ]) {
+    t.mock.timers.tick(minutes * 60 * 1000 - 1000);
+    await flush();
+    assert.equal(attempts(), expected - 1, `not before ${minutes} min`);
+    t.mock.timers.tick(1000);
+    await flush();
+    assert.equal(attempts(), expected, `after ${minutes} min`);
+  }
+
+  assert.equal(device.paired, true, "the sixth attempt succeeds");
+  assert.equal(
+    lines.warn.filter((l) => l.includes("take the battery out")).length,
+    1,
+  );
+});
