@@ -1,4 +1,10 @@
 # Changelog
+## 0.1.0-beta.4
+
+**Beta.**
+
+* Fixed installing failing on Node 24 (`@stoprocent/noble … node-gyp-build … Completion callback never invoked`): a dependency of the D-Bus library brought in node-gyp 7, which can't build on Node 24; the plugin now ships a current node-gyp.
+
 ## 0.1.0-beta.3
 
 **Beta.**

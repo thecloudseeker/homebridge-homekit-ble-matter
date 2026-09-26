@@ -1,6 +1,18 @@
-const { test } = require("node:test");
+const { test, after } = require("node:test");
 const assert = require("node:assert/strict");
 const { createRequire } = require("module");
+
+// On a host with a system D-Bus (e.g. a Linux CI runner), starting the
+// binding opens a real D-Bus connection, which would keep this test process
+// alive forever. Close it once the tests are done.
+after(() => {
+  const { loadHap } = require("../lib/hap");
+  try {
+    loadHap().noble._bindings?.stop?.();
+  } catch {
+    // Nothing was started.
+  }
+});
 
 // Uses the real hap-controller and noble 2 (constructing the D-Bus binding
 // is lazy, so this runs without Bluetooth). Each test file runs in its own
