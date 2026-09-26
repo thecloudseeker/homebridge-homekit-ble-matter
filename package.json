@@ -1,0 +1,56 @@
+{
+  "name": "@thecloudseeker/homebridge-homekit-ble-matter",
+  "version": "0.1.0-beta.1",
+  "description": "Homebridge plugin that pairs with HomeKit-over-Bluetooth sensors and exposes them over Matter (IKEA Dirigera, Google Home, Alexa, SmartThings…)",
+  "main": "index.js",
+  "scripts": {
+    "lint": "eslint .",
+    "test": "node --test \"test/**/*.test.js\""
+  },
+  "author": {
+    "name": "thecloudseeker",
+    "url": "https://github.com/thecloudseeker"
+  },
+  "license": "MIT",
+  "keywords": [
+    "homebridge-plugin",
+    "homekit",
+    "bluetooth",
+    "ble",
+    "matter",
+    "temperature",
+    "humidity",
+    "qingping",
+    "supports-matter"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/thecloudseeker/homebridge-homekit-ble-matter.git"
+  },
+  "bugs": {
+    "url": "https://github.com/thecloudseeker/homebridge-homekit-ble-matter/issues"
+  },
+  "homepage": "https://github.com/thecloudseeker/homebridge-homekit-ble-matter#readme",
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "index.js",
+    "config.schema.json",
+    "lib/"
+  ],
+  "engines": {
+    "homebridge": "^2.4.0",
+    "node": "^20.18.0 || ^22.10.0 || ^24.0.0"
+  },
+  "dependencies": {
+    "hap-controller": "0.10.2"
+  },
+  "devDependencies": {
+    "eslint": "^10.9.1",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-prettier": "^5.5.6",
+    "globals": "^17.11.0",
+    "prettier": "^3.9.6"
+  }
+}
