@@ -298,3 +298,27 @@ test("cache replays right after a scan start don't trigger pairing; the first li
   assert.equal(device.paired, true);
   assert.equal(api.matter.accessories.size, 1);
 });
+
+test("after registration, state is only sent once Homebridge had time to finish replacing the device", async (t) => {
+  const { platform, api, device } = setup(t);
+  api.emit("didFinishLaunching");
+  platform.discovery.emit("serviceUp", advertisement(device));
+  await flush();
+
+  // Registered and already read once, but nothing sent yet.
+  assert.equal(api.matter.accessories.size, 1);
+  assert.equal(api.matter.stateUpdates.length, 0);
+
+  t.mock.timers.tick(3000);
+  await flush();
+
+  const clusters = api.matter.stateUpdates.map((u) => u.cluster);
+  assert.ok(
+    clusters.includes("temperatureMeasurement"),
+    "the held reading is sent",
+  );
+  assert.ok(
+    clusters.includes("bridgedDeviceBasicInformation"),
+    "then the name",
+  );
+});

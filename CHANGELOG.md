@@ -1,4 +1,10 @@
 # Changelog
+## 0.1.0-beta.8
+
+**Beta.**
+
+* Fixed Homebridge logging `Failed to update state ... is closed` (in red) on every restart: the plugin's first update arrived while Homebridge was still re-creating the Matter device ([homebridge/homebridge#4018](https://github.com/homebridge/homebridge/issues/4018)). The plugin now waits a moment after registering; readings arriving meanwhile are kept and sent right after, so the first reading isn't lost.
+
 ## 0.1.0-beta.7
 
 **Beta.**

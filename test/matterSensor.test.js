@@ -143,12 +143,29 @@ test("update ignores readings the device doesn't have", async () => {
   );
 });
 
-test("nothing is pushed before registration, or after it failed", async () => {
+test("readings pushed before registration are held and sent, latest per cluster, once registered", async () => {
   const { sensor, matter } = build();
   await sensor.update({ temperature: 20 });
+  await sensor.update({ temperature: 21, humidity: 50 });
+  assert.equal(matter.stateUpdates.length, 0);
+
   sensor.markRegistered();
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.deepEqual(
+    matter.stateUpdates.map(({ cluster, attributes }) => [cluster, attributes]),
+    [
+      ["temperatureMeasurement", { measuredValue: 2100 }],
+      ["relativeHumidityMeasurement", { measuredValue: 5000 }],
+    ],
+  );
+});
+
+test("nothing is pushed after registration failed", async () => {
+  const { sensor, matter } = build();
   sensor.markRegistrationFailed();
   await sensor.update({ temperature: 20 });
+  sensor.markRegistered();
 
   assert.equal(matter.stateUpdates.length, 0);
 });
