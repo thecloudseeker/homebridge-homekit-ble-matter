@@ -1,4 +1,11 @@
 # Changelog
+## 0.1.0-beta.9
+
+**Beta.**
+
+* Fixed the sensor becoming permanently unresponsive after a single failed connection (e.g. `le-connection-abort-by-local`) until the child bridge was restarted. The failed attempt left the Bluetooth library's connection state stuck in a way it never recovered from, so every later read timed out (and Node warned about `MaxListenersExceeded ... disconnect listeners`). The plugin now clears such a leftover state before each connection, so a failed connection costs one read and the next retry works.
+* Failed reads after the first are now logged at debug level with their error, instead of not at all.
+
 ## 0.1.0-beta.8
 
 **Beta.**

@@ -97,6 +97,9 @@ function createFakeDevice(overrides = {}) {
       61: 0,
     },
     failNextReads: 0,
+    // Failed connects that leave the peripheral in state 'error', as noble
+    // 2's D-Bus binding does.
+    failNextConnects: 0,
     // hap-controller rejects BLE timeouts with a plain string, not an Error.
     failNextPairs: 0,
     calls: [],
@@ -112,7 +115,11 @@ function advertisement(device, overrides = {}) {
     GSN: 1,
     CN: 1,
     availableToPair: !device.paired,
-    peripheral: { id: "cb81d1b000a5", address: "cb:81:d1:b0:00:a5" },
+    peripheral: {
+      id: "cb81d1b000a5",
+      address: "cb:81:d1:b0:00:a5",
+      state: "disconnected",
+    },
     ...overrides,
   };
 }
@@ -150,6 +157,7 @@ function createFakeHap(device, { withNoble = false } = {}) {
   class GattClient {
     constructor(deviceId, peripheral, pairingData) {
       this.deviceId = deviceId;
+      this.peripheral = peripheral;
       this.pairingData = pairingData;
       this.closed = false;
     }
@@ -185,6 +193,20 @@ function createFakeHap(device, { withNoble = false } = {}) {
     }
     async getCharacteristics(list) {
       device.calls.push(`read:${list.map((a) => a.iid).join(",")}`);
+      // Like hap-controller on noble 2's D-Bus binding: a peripheral left in
+      // 'error'/'disconnecting' by a failed connect never finishes the
+      // disconnect hap-controller sends first, so every attempt times out.
+      if (["error", "disconnecting"].includes(this.peripheral?.state)) {
+        this.peripheral.state = "disconnecting";
+        throw "Timeout";
+      }
+      if (device.failNextConnects > 0) {
+        device.failNextConnects -= 1;
+        if (this.peripheral != null) {
+          this.peripheral.state = "error";
+        }
+        throw "le-connection-abort-by-local";
+      }
       if (device.scanningDuringConnect?.()) {
         throw "le-connection-abort-by-local";
       }

@@ -274,6 +274,25 @@ test("a failed read warns once and is retried after a minute", async (t) => {
   );
 });
 
+test("a failed connect that leaves noble's peripheral stuck doesn't block every later read", async (t) => {
+  const device = createFakeDevice();
+  const { sensor, readings, lines } = setup(t, {
+    device,
+    store: storeFromPreviousRun(device),
+  });
+  device.failNextConnects = 1;
+
+  sensor.handleAdvertisement(advertisement(device));
+  await flush();
+  assert.equal(readings.length, 0);
+  assert.match(lines.warn.join("\n"), /le-connection-abort-by-local/);
+
+  t.mock.timers.tick(60 * 1000);
+  await flush();
+  assert.equal(readings.length, 1);
+  assert.equal(sensor.advertisement.peripheral.state, "disconnected");
+});
+
 test("after the timeout without a successful read, readings are reported as unavailable", async (t) => {
   const device = createFakeDevice();
   const { sensor, readings } = setup(t, {

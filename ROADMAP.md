@@ -4,13 +4,13 @@
 is stable, and every known rough edge is either fixed or knowingly accepted and
 documented.
 
-**Where we are (0.1.0-beta.7):** one Qingping CGG1H, paired and exposed to IKEA
+**Where we are (0.1.0-beta.9):** one Qingping CGG1H, paired and exposed to IKEA
 Dirigera over Matter, on a Raspberry Pi 5 (Homebridge 2.4.0), sharing the
 Bluetooth adapter with two other BLE plugins. Running since 2026-09-26.
 
 ## 0.1.0 — first stable release
 
-Same code as 0.1.0-beta.7, released once a few days of real use look clean:
+Same code as 0.1.0-beta.9, released once a few days of real use look clean:
 
 - [ ] The log stays quiet: at most an occasional `Readings OK again`, no chains of `Reading failed`
 - [ ] Values keep updating in the controller, including across Homebridge restarts
@@ -41,6 +41,10 @@ Same code as 0.1.0-beta.7, released once a few days of real use look clean:
   unnecessary. Not a 1.0 blocker.
 - [ ] **D-Bus connection error guard** relies on noble 2.8.0 internals
   (`_bindings`, `_bus`). Pinned; report the missing `error` listener upstream.
+- [ ] **Stale connection state reset** (`releaseStalePeripheral` in `lib/hap.js`):
+  noble 2.8.0's D-Bus binding never completes a disconnect for a device it
+  holds no connection to, so a peripheral left in `error` after a failed
+  connect stays stuck. Report upstream; drop the workaround once fixed.
 - [ ] **New Matter `uniqueId` on every restart**
   ([homebridge/homebridge#4018](https://github.com/homebridge/homebridge/issues/4018)):
   Homebridge's to fix. For 1.0 it's enough that the README states the limitation.
