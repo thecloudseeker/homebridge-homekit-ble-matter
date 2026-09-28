@@ -42,6 +42,11 @@
               "minimum": 5,
               "description": "Overrides the default below for this device."
             },
+            "fastUpdates": {
+              "title": "Fast Updates (experimental)",
+              "type": "boolean",
+              "description": "Overrides the default below for this device."
+            },
             "matterId": {
               "title": "Matter ID (optional)",
               "type": "string",
@@ -65,6 +70,12 @@
         "minimum": 5,
         "description": "After this long without a successful read, the device is reported as not responding (it keeps its last values)."
       },
+      "fastUpdates": {
+        "title": "Fast Updates (experimental)",
+        "type": "boolean",
+        "default": false,
+        "description": "Let devices send changes the moment they happen (HomeKit broadcast notifications), instead of only on the next read - what door, motion and leak sensors need. Only for devices that support it; not yet tested with real hardware."
+      },
       "bluetoothBinding": {
         "title": "Bluetooth Access",
         "type": "string",
@@ -87,6 +98,7 @@
         "devices[].setupCode",
         "devices[].pollInterval",
         "devices[].timeout",
+        "devices[].fastUpdates",
         "devices[].matterId"
       ]
     },
@@ -94,7 +106,7 @@
       "type": "fieldset",
       "title": "Defaults",
       "expandable": true,
-      "items": ["pollInterval", "timeout", "bluetoothBinding"]
+      "items": ["pollInterval", "timeout", "fastUpdates", "bluetoothBinding"]
     }
   ]
 }

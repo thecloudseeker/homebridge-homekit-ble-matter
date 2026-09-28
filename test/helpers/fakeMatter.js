@@ -12,27 +12,70 @@
 // revision, behaviors, .with()) for lib/matterSensor.js to compose a
 // combined temperature/humidity type from, the way it does with Homebridge's
 // real api.matter.deviceTypes.
-function fakeDeviceType(name, deviceType, behaviorNames) {
+// A stand-in for a matter.js server behavior: an id, the features chosen
+// with .with(...), like the real ones.
+function fakeBehavior(id, features = []) {
+  return {
+    id,
+    features,
+    with: (...chosen) => fakeBehavior(id, chosen),
+  };
+}
+
+// `requirements`: {mandatory: [ClusterName], optional: [ClusterName]}, as
+// matter.js exposes a device type's clusters under
+// requirements.server.mandatory/optional.
+function fakeDeviceType(
+  name,
+  deviceType,
+  behaviorNames,
+  { mandatory = [], optional = [] } = {},
+) {
   const behaviors = Object.fromEntries(
     behaviorNames.map((behavior) => [behavior, `${name}.${behavior}`]),
   );
+  const camel = (cluster) => cluster[0].toLowerCase() + cluster.slice(1);
+  const requirementsOf = (list) =>
+    Object.fromEntries(
+      list.map((cluster) => [cluster, fakeBehavior(camel(cluster))]),
+    );
   const type = {
     name,
     deviceType,
     deviceRevision: 3,
     behaviors,
+    requirements: {
+      server: {
+        mandatory: requirementsOf(mandatory),
+        optional: requirementsOf(optional),
+      },
+    },
     with(...added) {
       return {
         ...type,
         behaviors: {
-          ...behaviors,
-          ...Object.fromEntries(added.map((b) => [b.split(".").pop(), b])),
+          ...type.behaviors,
+          ...Object.fromEntries(
+            added.map((b) =>
+              typeof b === "string" ? [b.split(".").pop(), b] : [b.id, b],
+            ),
+          ),
         },
       };
     },
   };
   return type;
 }
+
+const CONCENTRATIONS = [
+  "CarbonMonoxideConcentrationMeasurement",
+  "CarbonDioxideConcentrationMeasurement",
+  "NitrogenDioxideConcentrationMeasurement",
+  "OzoneConcentrationMeasurement",
+  "Pm25ConcentrationMeasurement",
+  "Pm10ConcentrationMeasurement",
+  "TotalVolatileOrganicCompoundsConcentrationMeasurement",
+];
 
 function createFakeMatter({ registrationError } = {}) {
   // Keyed by UUID, mirroring how the real Matter server tracks accessories.
@@ -58,6 +101,39 @@ function createFakeMatter({ registrationError } = {}) {
         "identify",
         "relativeHumidityMeasurement",
       ]),
+      ContactSensor: fakeDeviceType("ContactSensor", 21, [
+        "identify",
+        "booleanState",
+      ]),
+      LeakSensor: fakeDeviceType("WaterLeakDetector", 67, [
+        "identify",
+        "booleanState",
+      ]),
+      MotionSensor: fakeDeviceType("OccupancySensor", 263, [
+        "identify",
+        "occupancySensing",
+      ]),
+      LightSensor: fakeDeviceType("LightSensor", 262, [
+        "identify",
+        "illuminanceMeasurement",
+      ]),
+      SmokeSensor: fakeDeviceType("SmokeCoAlarm", 118, ["identify"], {
+        mandatory: ["SmokeCoAlarm"],
+        optional: ["CarbonMonoxideConcentrationMeasurement"],
+      }),
+      AirQualitySensor: fakeDeviceType(
+        "AirQualitySensor",
+        44,
+        ["identify", "airQuality"],
+        {
+          mandatory: ["AirQuality"],
+          optional: [
+            "TemperatureMeasurement",
+            "RelativeHumidityMeasurement",
+            ...CONCENTRATIONS,
+          ],
+        },
+      ),
     },
     async registerPlatformAccessories(
       pluginIdentifier,

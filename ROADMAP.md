@@ -30,6 +30,23 @@ Same code as 0.1.0-beta.11, released after two days of real use:
 - [x] Verified on real hardware: a sensor out of range for 10 minutes wasn't
   connected to, and was read the moment it was heard again (at -90 dBm)
 
+## 0.2.0 — more sensor types (branch `feature/sensor-types`)
+
+Implemented and tested against Homebridge's real Matter server; waiting for
+real devices:
+
+- [x] Contact, leak, motion, occupancy, light, smoke/CO, CO₂ and air quality
+  (PM2.5, PM10, VOC, NO₂, ozone), each mapped to its Matter device type
+- [x] Devices with several sensor kinds as one Matter device with parts;
+  repeated services as their own parts
+- [x] Fast updates via HomeKit broadcast notifications (experimental, opt-in)
+- [ ] **A real device of each kind.** Especially a contact or motion sensor
+  with broadcast support, to confirm the broadcast key exchange and
+  decryption on real hardware
+- [ ] **Buttons** (stateless programmable switches → Matter Generic Switch).
+  Needs events: only with fast updates, if a button broadcasts its presses
+- [ ] Status flags (tampered, active) where Matter has a place for them
+
 ## 0.2.x — close the known gaps
 
 - [ ] **Remove the pairing when a device leaves the config.** Today the only way
@@ -84,19 +101,15 @@ Same code as 0.1.0-beta.11, released after two days of real use:
 - [ ] Tested with **two Matter controllers** (IKEA Dirigera plus Apple Home or Google Home)
 - [ ] Pairing removal and adapter selection shipped; no configuration changes planned
 - [ ] README covers supported devices, setup, troubleshooting and known limitations
-- [ ] Scope stated: **temperature and humidity sensors with battery**. Other
-  HomeKit Bluetooth device types (contact, leak, motion, …) are 1.x features,
-  not 1.0 requirements.
+- [ ] Scope stated: **read-only HomeKit Bluetooth sensors**. The types tested
+  with a real device are supported; the others are marked as untested.
 
 Optional around 1.0: apply for **Homebridge Verified** (config schema, no
 postinstall scripts, proper error handling — mostly in place already).
 
 ## After 1.0
 
-- More sensor types (contact, leak, motion, air quality) where HomeKit BLE
-  devices expose them
 - A Homebridge UI page listing nearby HomeKit Bluetooth devices with their
   DeviceID, instead of reading it from the log
-- Encrypted "disconnected events" (broadcast notifications) if hap-controller
-  gains support ([hap-controller#43](https://github.com/Apollon77/hap-controller-node/issues/43)),
-  for change notifications without connecting
+- Offer the broadcast notification support upstream to hap-controller
+  ([hap-controller#43](https://github.com/Apollon77/hap-controller-node/issues/43))

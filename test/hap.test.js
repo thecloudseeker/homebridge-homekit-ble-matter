@@ -23,6 +23,7 @@ test("parseAccessoryDatabase finds the readings a CGG1H exposes, with their BLE 
     characteristicUuid: "ch-temp",
     iid: 257,
     format: "float",
+    perms: [],
   });
   assert.equal(readings.humidity.iid, 145);
   assert.equal(readings.batteryLevel.iid, 59);
@@ -163,4 +164,81 @@ test("rateLimitedWarning reports the first error, then at most one summary per i
     "D-Bus error",
     "D-Bus error (2 more in the last 10 min)",
   ]);
+});
+
+test("parseAccessoryDatabase reads every supported sensor service, numbering repeated ones", () => {
+  const { hapDatabase } = require("./helpers/fakeHap");
+  const { readings } = parseAccessoryDatabase(
+    hapDatabase([
+      [
+        "sensor.contact",
+        [
+          ["contact-state", 11, "uint8"],
+          ["status-lo-batt", 12, "uint8"],
+        ],
+      ],
+      [
+        "sensor.contact",
+        [
+          ["contact-state", 21, "uint8"],
+          ["status-lo-batt", 22, "uint8"],
+        ],
+      ],
+      ["sensor.light", [["light-level.current", 31, "float"]]],
+      ["sensor.motion", [["motion-detected", 41, "bool"]]],
+      [
+        "sensor.smoke",
+        [
+          ["smoke-detected", 51, "uint8"],
+          ["status-fault", 52, "uint8"],
+        ],
+      ],
+      [
+        "sensor.carbon-dioxide",
+        [
+          ["carbon-dioxide.detected", 61, "uint8"],
+          ["carbon-dioxide.level", 62, "float"],
+        ],
+      ],
+      [
+        "sensor.air-quality",
+        [
+          ["air-quality", 71, "uint8"],
+          ["density.voc", 72, "float"],
+          ["density.pm25", 73, "float"],
+        ],
+      ],
+      ["battery", [["battery-level", 81, "uint8"]]],
+    ]),
+    hap,
+  );
+  assert.deepEqual(Object.keys(readings).sort(), [
+    "airQuality",
+    "batteryLevel",
+    "carbonDioxide",
+    "carbonDioxideLevel",
+    "contact",
+    "contact.2",
+    "fault",
+    "lightLevel",
+    "lowBattery",
+    "motion",
+    "pm25",
+    "smoke",
+    "voc",
+  ]);
+  assert.equal(readings["contact.2"].iid, 21);
+  assert.equal(readings.lowBattery.iid, 12, "the battery is taken once");
+});
+
+test("parseAccessoryDatabase skips characteristics that can't be read", () => {
+  const { hapDatabase } = require("./helpers/fakeHap");
+  const { readings } = parseAccessoryDatabase(
+    hapDatabase([
+      ["sensor.motion", [["motion-detected", 41, "bool", ["ev"]]]],
+      ["sensor.leak", [["leak-detected", 51, "uint8", ["pr", "ev"]]]],
+    ]),
+    hap,
+  );
+  assert.deepEqual(Object.keys(readings), ["leak"]);
 });

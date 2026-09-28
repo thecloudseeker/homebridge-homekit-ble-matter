@@ -6,6 +6,7 @@ const path = require("path");
 const { EventEmitter } = require("events");
 const { createFakeMatter } = require("./helpers/fakeMatter");
 const {
+  hapDatabase,
   createFakeDevice,
   createFakeHap,
   advertisement,
@@ -31,6 +32,7 @@ function setup(
     matterEnabled = true,
     device = createFakeDevice(),
     withNoble = false,
+    configureBroadcasts,
   } = {},
 ) {
   t.mock.timers.enable({ apis: ["setTimeout", "setInterval", "Date"] });
@@ -41,6 +43,7 @@ function setup(
     {},
     {
       loadHap: () => hap,
+      configureBroadcasts,
     },
   );
   const api = new FakeAPI({ matterEnabled, storagePath });
@@ -467,4 +470,256 @@ test("the same readings don't re-register the Matter device", async (t) => {
   platform.ensureMatterSensor(config, sensor.cachedDatabase, sensor.cachedInfo);
   await flush();
   assert.equal(platform.matterSensors.get(config.deviceId), existing);
+});
+
+test("end to end: a door sensor with a light sensor becomes a contact device with a light part", async (t) => {
+  const device = createFakeDevice({
+    database: hapDatabase([
+      [
+        "sensor.contact",
+        [
+          ["contact-state", 11, "uint8"],
+          ["status-lo-batt", 12, "uint8"],
+        ],
+      ],
+      ["sensor.light", [["light-level.current", 21, "float"]]],
+      ["battery", [["battery-level", 31, "uint8"]]],
+    ]),
+    values: { 4: "Acme", 5: "Door+Light", 11: 1, 12: 0, 21: 250, 31: 77 },
+  });
+  const { platform, api, lines } = setup(t, { device });
+  api.emit("didFinishLaunching");
+  platform.discovery.emit("serviceUp", advertisement(device));
+  await flush();
+
+  assert.equal(api.matter.accessories.size, 1);
+  const [accessory] = api.matter.accessories.values();
+  assert.equal(accessory.deviceType.name, "ContactSensor");
+  assert.equal(accessory.clusters.booleanState.stateValue, false, "open");
+  assert.equal(accessory.clusters.powerSource.batPercentRemaining, 154);
+  assert.deepEqual(
+    accessory.parts.map((part) => [part.id, part.deviceType.name]),
+    [["light", "LightSensor"]],
+  );
+  assert.ok(
+    lines.info.some((l) =>
+      l.includes("Registered Matter device (contact, battery + light level)"),
+    ),
+  );
+
+  // The door closes; the next read pushes it, and the light to its part.
+  device.values[11] = 0;
+  device.values[21] = 1000;
+  t.mock.timers.tick(10 * 60 * 1000);
+  await flush();
+  t.mock.timers.tick(3000);
+  await flush();
+  const last = (cluster, partId) =>
+    api.matter.stateUpdates
+      .filter((u) => u.cluster === cluster && u.partId === partId)
+      .at(-1)?.attributes;
+  assert.deepEqual(last("booleanState", undefined), { stateValue: true });
+  assert.deepEqual(last("illuminanceMeasurement", "light"), {
+    measuredValue: 30001,
+  });
+});
+
+test("a device reporting nothing exposable is explained, not registered", async (t) => {
+  const device = createFakeDevice({
+    database: hapDatabase([["battery", [["battery-level", 31, "uint8"]]]]),
+    values: { 4: "Acme", 5: "Remote", 31: 50 },
+  });
+  const { platform, api, lines } = setup(t, { device });
+  api.emit("didFinishLaunching");
+  platform.discovery.emit("serviceUp", advertisement(device));
+  await flush();
+
+  assert.equal(api.matter.accessories.size, 0);
+  assert.ok(
+    lines.warn.some((l) =>
+      l.includes("Reports nothing this plugin can expose"),
+    ),
+  );
+});
+
+test("fast updates: after setup, an encrypted notification is applied the moment it arrives", async (t) => {
+  const crypto = require("crypto");
+  const { encryptNotification } = require("../lib/broadcast");
+  const device = createFakeDevice({
+    database: hapDatabase([
+      [
+        "sensor.contact",
+        [["contact-state", 11, "uint8", ["pr", "ev", "ev-broadcast"]]],
+      ],
+      ["sensor.light", [["light-level.current", 21, "float", ["pr"]]]],
+    ]),
+    values: { 4: "Acme", 5: "Door", 11: 0, 21: 5 },
+  });
+  const key = crypto.randomBytes(32);
+  const setups = [];
+  const { platform, api, lines } = setup(t, {
+    device,
+    withNoble: true,
+    config: {
+      fastUpdates: true,
+      devices: [
+        {
+          deviceId: "41:21:14:e5:c2:25",
+          name: "Front door",
+          setupCode: "12884842",
+        },
+      ],
+    },
+    configureBroadcasts: async (client, peripheral, targets) => {
+      setups.push(targets.map((target) => target.key));
+      return {
+        key,
+        advertisingId: null,
+        gsn: 40,
+        configNumber: 1,
+        enabled: [11],
+      };
+    },
+  });
+  api.emit("didFinishLaunching");
+  const noble = platform.hap.noble;
+  const adv = advertisement(device, { GSN: 40 });
+  t.mock.timers.tick(3000);
+  noble.emit("discover", adv.peripheral);
+  platform.discovery.emit("serviceUp", adv);
+  await flush(10);
+
+  assert.deepEqual(
+    setups,
+    [["contact"]],
+    "only broadcast-capable characteristics",
+  );
+  assert.ok(lines.info.some((l) => l.includes("Fast updates on: contact")));
+  t.mock.timers.tick(3000);
+  await flush();
+
+  // The door opens: the device broadcasts contact-state 1 with GSN 41.
+  const advertisingId = Buffer.from("412114E5C225", "hex");
+  const value = Buffer.alloc(8);
+  value.writeUInt8(1, 0);
+  const updatesBefore = api.matter.stateUpdates.length;
+  adv.peripheral.advertisement = {
+    manufacturerData: encryptNotification(key, advertisingId, 41, 11, value),
+  };
+  noble.emit("discover", adv.peripheral);
+  await flush();
+
+  const pushed = api.matter.stateUpdates.slice(updatesBefore);
+  assert.deepEqual(pushed, [
+    {
+      uuid: [...api.matter.accessories.keys()][0],
+      cluster: "booleanState",
+      attributes: { stateValue: false },
+      partId: undefined,
+    },
+  ]);
+
+  // Repeated for a few seconds: applied once.
+  noble.emit("discover", adv.peripheral);
+  await flush();
+  assert.equal(api.matter.stateUpdates.length, updatesBefore + 1);
+
+  // The plain advertisement's GSN catches up: no extra read for it.
+  const readsBefore = device.calls.filter((c) => c.startsWith("read:")).length;
+  platform.discovery.emit("serviceChanged", advertisement(device, { GSN: 41 }));
+  t.mock.timers.tick(5 * 60 * 1000);
+  await flush();
+  assert.equal(
+    device.calls.filter((c) => c.startsWith("read:")).length,
+    readsBefore,
+  );
+});
+
+test("fast updates: another device's notification, or one with a wrong key, is ignored", async (t) => {
+  const crypto = require("crypto");
+  const { encryptNotification } = require("../lib/broadcast");
+  const device = createFakeDevice({
+    database: hapDatabase([
+      [
+        "sensor.motion",
+        [["motion-detected", 11, "bool", ["pr", "ev-broadcast"]]],
+      ],
+    ]),
+    values: { 4: "Acme", 5: "Motion", 11: 0 },
+  });
+  const key = crypto.randomBytes(32);
+  const { platform, api } = setup(t, {
+    device,
+    withNoble: true,
+    config: {
+      fastUpdates: true,
+      devices: [
+        { deviceId: "41:21:14:e5:c2:25", name: "Hall", setupCode: "12884842" },
+      ],
+    },
+    configureBroadcasts: async () => ({
+      key,
+      advertisingId: null,
+      gsn: 7,
+      configNumber: 1,
+      enabled: [11],
+    }),
+  });
+  api.emit("didFinishLaunching");
+  const noble = platform.hap.noble;
+  const adv = advertisement(device, { GSN: 7 });
+  t.mock.timers.tick(3000);
+  noble.emit("discover", adv.peripheral);
+  platform.discovery.emit("serviceUp", adv);
+  await flush(10);
+  t.mock.timers.tick(3000);
+  await flush();
+  const before = api.matter.stateUpdates.length;
+
+  const value = Buffer.from([1, 0, 0, 0, 0, 0, 0, 0]);
+  for (const data of [
+    encryptNotification(
+      crypto.randomBytes(32),
+      Buffer.from("412114E5C225", "hex"),
+      8,
+      11,
+      value,
+    ),
+    encryptNotification(key, Buffer.from("AABBCCDDEEFF", "hex"), 8, 11, value),
+  ]) {
+    adv.peripheral.advertisement = { manufacturerData: data };
+    noble.emit("discover", adv.peripheral);
+  }
+  await flush();
+  assert.equal(api.matter.stateUpdates.length, before);
+});
+
+test("fast updates: a device without broadcast support says so once and keeps polling", async (t) => {
+  const setups = [];
+  const { platform, api, device, lines } = setup(t, {
+    config: {
+      fastUpdates: true,
+      devices: [
+        {
+          deviceId: "41:21:14:e5:c2:25",
+          name: "Schlafzimmer",
+          setupCode: "12884842",
+        },
+      ],
+    },
+    configureBroadcasts: async () => {
+      setups.push(1);
+    },
+  });
+  api.emit("didFinishLaunching");
+  platform.discovery.emit("serviceUp", advertisement(device));
+  await flush(10);
+  t.mock.timers.tick(10 * 60 * 1000);
+  await flush(10);
+
+  assert.equal(setups.length, 0);
+  assert.equal(
+    lines.info.filter((l) => l.includes("Doesn't support fast updates")).length,
+    1,
+  );
 });

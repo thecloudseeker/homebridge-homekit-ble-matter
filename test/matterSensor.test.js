@@ -195,12 +195,11 @@ test("nothing is pushed after registration failed", async () => {
   assert.equal(matter.stateUpdates.length, 0);
 });
 
-test("capabilitiesOf derives what a parsed database can report", () => {
-  assert.deepEqual(capabilitiesOf({ temperature: {}, lowBattery: {} }), {
-    temperature: true,
-    humidity: false,
-    battery: true,
-  });
+test("capabilitiesOf lists the reading keys a parsed database can report, sorted", () => {
+  assert.deepEqual(
+    capabilitiesOf({ temperature: {}, lowBattery: {}, "contact.2": {} }),
+    ["contact.2", "lowBattery", "temperature"],
+  );
 });
 
 test("a new device starts with the last stored readings instead of unknown (Dirigera shows unknown as 100 °C)", () => {

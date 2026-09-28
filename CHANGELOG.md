@@ -1,4 +1,15 @@
 # Changelog
+## 0.2.0-beta.1 (unreleased)
+
+**Beta.** More sensor types and fast updates. Everything except temperature/humidity is implemented and tested against Homebridge's real Matter server, but not yet with real devices.
+
+* New sensor types: **contact, leak, motion, occupancy, light, smoke, carbon monoxide (alarm and level), carbon dioxide, air quality with PM2.5, PM10, VOC, NO₂ and ozone**. Each becomes the matching Matter device; an air monitor's temperature and humidity go on its air quality device.
+* A device with several kinds of sensors (e.g. motion plus light) becomes one Matter device with parts, instead of only its first reading being used. A service a device has twice (e.g. two temperature sensors) becomes its own part. A temperature/humidity sensor stays exactly as before.
+* **Fast updates** (`fastUpdates`, experimental, off by default): devices that support HomeKit's encrypted broadcast notifications send changes the moment they happen, without a connection. The plugin asks the device for its broadcast key once and applies each change as it's heard. Devices without support say so once and keep working as before.
+* Change-triggered reads for devices reporting events (contact, motion, occupancy, leak, smoke, CO, CO₂ alarm) now happen within 30 seconds instead of at most every 5 minutes.
+* Characteristics that can't be read (event-only) are skipped instead of failing every read.
+* Tests now also register every sensor type on Homebridge's real Matter server (Homebridge 2.4.0 as a dev dependency). This caught a part (child endpoint) being rejected by matter.js for an empty descriptor tag list, fixed before it shipped.
+
 ## 0.1.1
 
 Same code as 0.1.1-beta.1, released after a test on real hardware: a sensor taken out of range was left alone until it was heard again, then read at once.

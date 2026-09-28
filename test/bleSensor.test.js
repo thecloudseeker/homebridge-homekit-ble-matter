@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const { BleSensor } = require("../lib/bleSensor");
 const { ConnectionQueue } = require("../lib/connectionQueue");
 const {
+  hapDatabase,
   createFakeDevice,
   createFakeHap,
   advertisement,
@@ -177,8 +178,6 @@ test("a restart reuses the stored pairing and structure: no pairing, no structur
     {
       temperature: 22.4,
       humidity: 60.5,
-      batteryLevel: undefined,
-      lowBattery: undefined,
     },
   ]);
 });
@@ -354,8 +353,6 @@ test("the last readings are stored, so a restart starts with them", async (t) =>
   assert.deepEqual(store.load(DEVICE_ID).readings, {
     temperature: 22.4,
     humidity: 60.5,
-    batteryLevel: undefined,
-    lowBattery: undefined,
   });
   assert.equal(sensor.cachedReadings.temperature, 22.4);
 });
@@ -945,4 +942,27 @@ test("BlueZ's 'interface not found' error is explained", async (t) => {
   assert.ok(
     lines.warn.some((l) => l.includes("Bluetooth no longer knows the device")),
   );
+});
+
+test("a door sensor's change is read within 30 seconds, not 5 minutes", async (t) => {
+  const device = createFakeDevice({
+    database: hapDatabase([
+      ["sensor.contact", [["contact-state", 11, "uint8"]]],
+    ]),
+    values: { 4: "Acme", 5: "Door", 11: 0 },
+  });
+  const { sensor, readings } = setup(t, { device });
+  sensor.handleAdvertisement(advertisement(device, { GSN: 1 }));
+  await flush(10);
+  assert.equal(readings.length, 1);
+
+  t.mock.timers.tick(10 * 1000);
+  device.values[11] = 1;
+  sensor.handleAdvertisement(advertisement(device, { GSN: 2 }));
+  await flush();
+  assert.equal(readings.length, 1, "deferred: the last read was 10 s ago");
+
+  t.mock.timers.tick(20 * 1000);
+  await flush();
+  assert.deepEqual(readings.at(-1), { contact: false });
 });

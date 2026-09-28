@@ -1,4 +1,6 @@
 const { EventEmitter } = require("events");
+const Characteristic = require("hap-controller/lib/model/characteristic");
+const Service = require("hap-controller/lib/model/service");
 
 // Fakes the part of hap-controller this plugin uses (see lib/hap.js
 // loadHap): BLEDiscovery, GattClient, characteristicFromUuid,
@@ -104,6 +106,63 @@ function createFakeDevice(overrides = {}) {
     failNextPairs: 0,
     calls: [],
     ...overrides,
+  };
+}
+
+// An accessory database with real HAP UUIDs, from a compact description:
+// [["sensor.contact", [["contact-state", 11, "uint8"], ...]], ...] - service
+// and characteristic names without their "public.hap.service." /
+// "public.hap.characteristic." prefix, each characteristic as [name, iid,
+// format, perms?]. An accessory-information service is added.
+function hapDatabase(services) {
+  let serviceIid = 100;
+  return {
+    accessories: [
+      {
+        aid: 1,
+        services: [
+          {
+            iid: 1,
+            type: Service.uuidFromService(
+              "public.hap.service.accessory-information",
+            ),
+            characteristics: [
+              {
+                iid: 4,
+                type: Characteristic.uuidFromCharacteristic(
+                  "public.hap.characteristic.manufacturer",
+                ),
+                format: "string",
+              },
+              {
+                iid: 5,
+                type: Characteristic.uuidFromCharacteristic(
+                  "public.hap.characteristic.model",
+                ),
+                format: "string",
+              },
+            ],
+          },
+          ...services.map(([service, characteristics]) => {
+            serviceIid += 100;
+            return {
+              iid: serviceIid,
+              type: Service.uuidFromService(`public.hap.service.${service}`),
+              characteristics: characteristics.map(
+                ([name, iid, format, perms]) => ({
+                  iid,
+                  type: Characteristic.uuidFromCharacteristic(
+                    `public.hap.characteristic.${name}`,
+                  ),
+                  format,
+                  ...(perms ? { perms } : {}),
+                }),
+              ),
+            };
+          }),
+        ],
+      },
+    ],
   };
 }
 
@@ -244,8 +303,11 @@ function createFakeHap(device, { withNoble = false } = {}) {
   return {
     BLEDiscovery,
     GattClient,
-    characteristicFromUuid: (uuid) => NAMES[uuid] ?? uuid,
-    serviceFromUuid: (uuid) => NAMES[uuid] ?? uuid,
+    // Short fake UUIDs, or real HAP UUIDs through hap-controller's own
+    // mapping (see hapDatabase).
+    characteristicFromUuid: (uuid) =>
+      NAMES[uuid] ?? Characteristic.characteristicFromUuid(uuid),
+    serviceFromUuid: (uuid) => NAMES[uuid] ?? Service.serviceFromUuid(uuid),
     noble,
   };
 }
@@ -286,6 +348,7 @@ async function flush(times = 5) {
 }
 
 module.exports = {
+  hapDatabase,
   createFakeDevice,
   createFakeHap,
   advertisement,
