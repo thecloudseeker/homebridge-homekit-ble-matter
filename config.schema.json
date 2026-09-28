@@ -57,7 +57,7 @@
         "type": "integer",
         "default": 60,
         "minimum": 5,
-        "description": "After this long without a successful read, readings are reported as unavailable."
+        "description": "After this long without a successful read, the device is reported as not responding (it keeps its last values)."
       },
       "bluetoothBinding": {
         "title": "Bluetooth Access",

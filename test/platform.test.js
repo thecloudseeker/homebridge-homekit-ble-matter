@@ -133,6 +133,9 @@ test("the pairing survives a restart: the second run neither pairs nor re-reads 
     1,
     "registered from the stored structure",
   );
+  // ...with the last readings, not unknown values (Dirigera: 100 °C).
+  const [registered] = api.matter.accessories.values();
+  assert.equal(registered.clusters.temperatureMeasurement.measuredValue, 2240);
 
   first.device.calls.length = 0;
   platform.discovery.emit("serviceUp", advertisement(first.device));

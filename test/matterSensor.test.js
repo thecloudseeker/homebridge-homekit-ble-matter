@@ -6,12 +6,18 @@ const { MatterSensor, capabilitiesOf } = require("../lib/matterSensor");
 
 const ALL = { temperature: true, humidity: true, battery: true };
 
-function build(capabilities = ALL, info = {}, matter = createFakeMatter()) {
+function build(
+  capabilities = ALL,
+  info = {},
+  matter = createFakeMatter(),
+  readings = undefined,
+) {
   const sensor = new MatterSensor(matter, createSilentLog(), {
     deviceId: "41:21:14:e5:c2:25",
     name: "Schlafzimmer",
     capabilities,
     info,
+    readings,
   });
   return { sensor, matter, device: sensor.toAccessories()[0] };
 }
@@ -101,18 +107,34 @@ test("update converts readings to Matter units", async () => {
     [
       ["temperatureMeasurement", { measuredValue: 2240 }],
       ["relativeHumidityMeasurement", { measuredValue: 6050 }],
-      ["powerSource", { batPercentRemaining: 172, batChargeLevel: 0 }],
+      [
+        "powerSource",
+        {
+          batPercentRemaining: 172,
+          batChargeLevel: 0,
+          batReplacementNeeded: false,
+        },
+      ],
     ],
   );
 });
 
-test("update reports the sensor's low-battery flag as a battery warning", async () => {
+test("update reports the sensor's low-battery flag as a battery warning and a replacement need", async () => {
   const { sensor, matter } = build();
   sensor.markRegistered();
 
   await sensor.update({ lowBattery: true });
 
-  assert.deepEqual(matter.stateUpdates[0].attributes, { batChargeLevel: 1 });
+  assert.deepEqual(matter.stateUpdates[0].attributes, {
+    batChargeLevel: 1,
+    batReplacementNeeded: true,
+  });
+});
+
+test("the battery is declared user-replaceable", () => {
+  const { device } = build();
+  assert.equal(device.clusters.powerSource.batReplaceability, 2);
+  assert.equal(device.clusters.powerSource.batReplacementNeeded, false);
 });
 
 test("update pushes null for readings that became unavailable, and skips ones never read", async () => {
@@ -176,4 +198,36 @@ test("capabilitiesOf derives what a parsed database can report", () => {
     humidity: false,
     battery: true,
   });
+});
+
+test("a new device starts with the last stored readings instead of unknown (Dirigera shows unknown as 100 °C)", () => {
+  const { device } = build(ALL, {}, createFakeMatter(), {
+    temperature: 21.6,
+    humidity: 61,
+    batteryLevel: 83,
+    lowBattery: true,
+  });
+  assert.equal(device.clusters.temperatureMeasurement.measuredValue, 2160);
+  assert.equal(device.clusters.relativeHumidityMeasurement.measuredValue, 6100);
+  assert.equal(device.clusters.powerSource.batPercentRemaining, 166);
+  assert.equal(device.clusters.powerSource.batChargeLevel, 1);
+  assert.equal(device.clusters.powerSource.batReplacementNeeded, true);
+});
+
+test("setReachable pushes the bridged device's reachable flag, only when it changes", async () => {
+  const { sensor, matter } = build();
+  sensor.markRegistered();
+
+  await sensor.setReachable(true);
+  await sensor.setReachable(false);
+  await sensor.setReachable(false);
+  await sensor.setReachable(true);
+
+  assert.deepEqual(
+    matter.stateUpdates.map(({ cluster, attributes }) => [cluster, attributes]),
+    [
+      ["bridgedDeviceBasicInformation", { reachable: false }],
+      ["bridgedDeviceBasicInformation", { reachable: true }],
+    ],
+  );
 });

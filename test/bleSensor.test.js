@@ -15,7 +15,14 @@ const DEVICE_ID = "41:21:14:E5:C2:25";
 
 function setup(
   t,
-  { device = createFakeDevice(), config = {}, store, lastSeenAt } = {},
+  {
+    device = createFakeDevice(),
+    config = {},
+    store,
+    lastSeenAt,
+    pairableCandidates,
+    onReachable,
+  } = {},
 ) {
   t.mock.timers.enable({ apis: ["setTimeout", "setInterval", "Date"] });
   const hap = createFakeHap(device);
@@ -37,6 +44,8 @@ function setup(
     onReady: (database, info) => ready.push({ database, info }),
     onReadings: (values) => readings.push(values),
     ...(lastSeenAt ? { lastSeenAt } : {}),
+    ...(pairableCandidates ? { pairableCandidates } : {}),
+    ...(onReachable ? { onReachable } : {}),
   });
   t.after(() => sensor.stop());
   return { sensor, device, lines, ready, readings, store: sensor.store };
@@ -293,12 +302,14 @@ test("a failed connect that leaves noble's peripheral stuck doesn't block every 
   assert.equal(sensor.advertisement.peripheral.state, "disconnected");
 });
 
-test("after the timeout without a successful read, readings are reported as unavailable", async (t) => {
+test("after the timeout without a successful read, the device is reported unreachable (not with cleared values), and reachable again on the next read", async (t) => {
   const device = createFakeDevice();
+  const reachability = [];
   const { sensor, readings } = setup(t, {
     device,
     store: storeFromPreviousRun(device),
     config: { timeout: 30, pollInterval: 60 },
+    onReachable: (r) => reachability.push(r),
   });
   sensor.handleAdvertisement(advertisement(device));
   await flush();
@@ -307,12 +318,46 @@ test("after the timeout without a successful read, readings are reported as unav
   t.mock.timers.tick(30 * 60 * 1000);
   await flush();
 
-  assert.deepEqual(readings.at(-1), {
-    temperature: null,
-    humidity: null,
-    batteryLevel: null,
-    lowBattery: null,
+  assert.deepEqual(reachability, [false]);
+  assert.ok(readings.every((r) => r.temperature != null));
+
+  device.failNextReads = 0;
+  t.mock.timers.tick(60 * 60 * 1000);
+  await flush();
+  assert.deepEqual(reachability, [false, true]);
+});
+
+test("a sensor never read after a restart is also reported unreachable after the timeout", async (t) => {
+  const device = createFakeDevice();
+  const reachability = [];
+  setup(t, {
+    device,
+    store: storeFromPreviousRun(device),
+    config: { timeout: 30 },
+    onReachable: (r) => reachability.push(r),
   });
+  // No advertisement at all: the sensor is out of range.
+  t.mock.timers.tick(30 * 60 * 1000);
+  await flush();
+  assert.deepEqual(reachability, [false]);
+});
+
+test("the last readings are stored, so a restart starts with them", async (t) => {
+  const device = createFakeDevice();
+  const { sensor, store } = setup(t, {
+    device,
+    store: storeFromPreviousRun(device),
+  });
+  sensor.handleAdvertisement(advertisement(device));
+  await flush();
+
+  assert.deepEqual(store.load(DEVICE_ID).readings, {
+    temperature: 22.4,
+    humidity: 60.5,
+    batteryLevel: undefined,
+    lowBattery: undefined,
+  });
+  assert.equal(sensor.cachedReadings.temperature, 22.4);
 });
 
 test("a sensor that was reset (advertises unpaired although keys are stored) is paired again", async (t) => {
@@ -515,4 +560,72 @@ test("after five failed reads in a row the log suggests likely causes, once", as
     lines.warn.filter((l) => l.includes("Other Bluetooth plugins")).length,
     1,
   );
+});
+
+test("after five failed reads it stops retrying every minute and only tries on the poll interval", async (t) => {
+  const device = createFakeDevice();
+  const { sensor, readings } = setup(t, {
+    device,
+    store: storeFromPreviousRun(device),
+    config: { timeout: 600, pollInterval: 10 },
+  });
+  device.failNextReads = 1000;
+  sensor.handleAdvertisement(advertisement(device));
+  await flush();
+  for (let i = 0; i < 4; i += 1) {
+    t.mock.timers.tick(60 * 1000);
+    await flush();
+  }
+  const reads = () => device.calls.filter((c) => c.startsWith("read:")).length;
+  assert.equal(reads(), 5);
+
+  // Nothing more within the next few minutes...
+  t.mock.timers.tick(4 * 60 * 1000);
+  await flush();
+  assert.equal(reads(), 5);
+
+  // ...but the poll still tries, and a recovered sensor is read again.
+  device.failNextReads = 0;
+  t.mock.timers.tick(6 * 60 * 1000);
+  await flush();
+  assert.equal(reads(), 6);
+  assert.equal(readings.length, 1);
+});
+
+test("the repeated-failure hint names a device available to pair as the likely new DeviceID", async (t) => {
+  const device = createFakeDevice();
+  const { sensor, lines } = setup(t, {
+    device,
+    store: storeFromPreviousRun(device),
+    config: { timeout: 600 },
+    pairableCandidates: () => "A9:DF:DB:F9:0D:35 ('Qin')",
+  });
+  device.failNextReads = 5;
+  sensor.handleAdvertisement(advertisement(device));
+  await flush();
+  for (let i = 0; i < 4; i += 1) {
+    t.mock.timers.tick(60 * 1000);
+    await flush();
+  }
+  const hint = lines.warn.find((l) => l.includes("Other Bluetooth plugins"));
+  assert.match(hint, /replace 41:21:14:E5:C2:25 .* A9:DF:DB:F9:0D:35/);
+});
+
+test("debug logging shows the signal strength for each connection and read", async (t) => {
+  const device = createFakeDevice();
+  const { sensor, lines } = setup(t, {
+    device,
+    store: storeFromPreviousRun(device),
+  });
+  const ad = advertisement(device);
+  ad.peripheral.rssi = -78;
+  sensor.handleAdvertisement(ad);
+  await flush();
+
+  assert.ok(
+    lines.debug.some((l) =>
+      /Connecting \(RSSI -78 dBm, heard \d+s ago\)/.test(l),
+    ),
+  );
+  assert.ok(lines.debug.some((l) => /Read \(startup, RSSI -78 dBm/.test(l)));
 });

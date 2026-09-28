@@ -62,3 +62,39 @@ test("without a reachable D-Bus (like this test machine) the adapter reports 'un
   }
   assert.equal(state, "unsupported");
 });
+
+test("a disconnect for a device without a connection completes instead of hanging", async () => {
+  const { loadHap } = require("../lib/hap");
+  const bindings = loadHap({ binding: "dbus" }).noble._bindings;
+  bindings._devices.set("f7a0c9e1f445", { proxy: null });
+  const done = new Promise((resolve) =>
+    bindings.once("disconnect", (id) => resolve(id)),
+  );
+  bindings.disconnect("F7:A0:C9:E1:F4:45");
+  assert.equal(await done, "f7a0c9e1f445");
+  bindings._devices.delete("f7a0c9e1f445");
+});
+
+test("a D-Bus error once the adapter is up does not report Bluetooth as unsupported", () => {
+  const { loadHap } = require("../lib/hap");
+  const bindings = loadHap({ binding: "dbus" }).noble._bindings;
+  // Started (and its bus created) by the 'unsupported' test above.
+  assert.ok(bindings._bus, "binding was started");
+  const originalState = bindings._state;
+  bindings._state = "poweredOn";
+  const states = [];
+  const onState = (s) => states.push(s);
+  bindings.on("stateChange", onState);
+  try {
+    // dbus-next emits this for a single message it can't parse.
+    bindings._bus.emit(
+      "error",
+      new Error("There was an error receiving a message"),
+    );
+    assert.deepEqual(states, []);
+    assert.equal(bindings._state, "poweredOn");
+  } finally {
+    bindings.off("stateChange", onState);
+    bindings._state = originalState;
+  }
+});

@@ -42,7 +42,7 @@ The pairing keys are stored in `<Homebridge storage>/homekit-ble-matter/`. Keep 
 | `devices[].name` | DeviceID | Name of the Matter device. |
 | `devices[].setupCode` | | 8-digit HomeKit code (`123-45-678`, `12345678` or `1234 5678`). Only needed for the first pairing. |
 | `pollInterval` | `10` | Minutes between reads (also per device). |
-| `timeout` | `60` | Minutes without a successful read before values are reported as unavailable (also per device). |
+| `timeout` | `60` | Minutes without a successful read before the device is reported as not responding; it keeps its last values (also per device). |
 | `bluetoothBinding` | `dbus` | How the adapter is accessed: `dbus` (BlueZ, recommended) or `hci` (raw HCI, needs root or network capabilities). |
 
 ## How it works
@@ -51,15 +51,18 @@ The pairing keys are stored in `<Homebridge storage>/homekit-ble-matter/`. Keep 
 - Each read is a short encrypted Bluetooth connection. Connections run one at a time, and scanning pauses while connected (BlueZ aborts connection attempts during a scan).
 - Bluetooth goes through BlueZ over D-Bus (noble 2). The underlying library, hap-controller, normally uses raw HCI (noble 1), which in testing couldn't hold a connection to a HomeKit sensor on a Raspberry Pi; this plugin hands it noble 2 instead.
 - A device measuring both temperature and humidity becomes **one** Matter endpoint, so controllers that list every endpoint separately (IKEA Dirigera) show one device.
-- **A factory reset gives a HomeKit device a new DeviceID.** Replace the old DeviceID in the config with the new one from the log. If a configured device isn't seen within two minutes of startup, the log says so and names any unconfigured device available to pair as the likely new DeviceID.
+- **A factory reset gives a HomeKit device a new DeviceID.** Replace the old DeviceID in the config with the new one from the log. If a configured device isn't seen within two minutes of startup, or its reads keep failing, the log says so and names any unconfigured device available to pair as the likely new DeviceID.
 - If pairing is removed without a reset (the DeviceID stays the same), the plugin notices and pairs again with the configured setup code.
-- A failed read is retried after a minute; a failed pairing after 1, 2, 5, then every 10 minutes.
+- A failed read is retried after a minute; after five failures in a row, only every `pollInterval` minutes. A failed pairing is retried after 1, 2, 5, then every 10 minutes.
+- After `timeout` minutes without a successful read, the Matter device is reported as **not responding** and keeps its last values (rather than clearing them, which some controllers display as an out-of-range value). It responds again with the next successful read. The last values are also kept across restarts.
+- Battery level and low-battery warning are reported over Matter; a low battery also sets "replacement needed".
 
 ## Troubleshooting
 
 - **Pairing keeps failing / the device is no longer found:** Bluetooth sensors can get stuck after a failed connection attempt: they stop advertising and refuse connections. Take the battery out for about 10 seconds and put it back (a restart, *not* a factory reset, which would change the DeviceID). The plugin retries by itself.
 - **"Already paired with another HomeKit controller":** remove the device from Apple Home first.
 - **"Bluetooth via BlueZ (D-Bus) is not available":** start the bluetooth service (`sudo systemctl start bluetooth`) and make sure the Homebridge user is in the `bluetooth` group, or switch Bluetooth Access to raw HCI.
+- **Reads keep failing:** turn on debug logging for the child bridge. Every connection then logs the signal strength and when the device was last heard, e.g. `Connecting (RSSI -78 dBm, heard 2s ago)`. Connections tend to become unreliable below about -85 dBm; moving the device and the Bluetooth adapter closer together helps.
 - **"Not seen since startup":** the device is out of range, out of battery, or was factory-reset and has a new DeviceID (the warning names the likely one).
 
 ## Known limitations

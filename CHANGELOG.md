@@ -1,4 +1,16 @@
 # Changelog
+## 0.1.0-beta.10
+
+**Beta.**
+
+* Changed how a device that can't be read is reported: after `timeout` minutes without a successful read, it's now marked as **not responding** (Matter "reachable") and keeps its last values, instead of having its values cleared. Some controllers display a cleared (unknown) temperature as the top of its range, e.g. 100 °C. The device responds again with the next successful read.
+* The last readings are now kept across restarts, so a device starts with them instead of empty values. A device that isn't read at all after a restart (e.g. out of range) is marked as not responding after `timeout` as well.
+* Fixed each failed connection taking 30 seconds and leaking a listener (`MaxListenersExceeded ... disconnect listeners`).
+* Fixed a transient D-Bus error being reported as `Bluetooth via BlueZ (D-Bus) is not available`, after which reads timed out (`unknown peripheral ... connected!`) until a restart. Bluetooth is now only reported as unavailable if D-Bus fails while starting up.
+* After five failed reads in a row, reads are retried every `pollInterval` minutes instead of every minute. The warning shown at that point also names any device available to pair as the likely new DeviceID, in case the device was factory-reset.
+* Battery: a low battery now also sets Matter's "replacement needed", and the battery is reported as user-replaceable.
+* Debug logging now shows the signal strength (RSSI) and when the device was last heard for every connection and read.
+
 ## 0.1.0-beta.9
 
 **Beta.**
