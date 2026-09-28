@@ -69,7 +69,10 @@ test("the device carries the sensor's own accessory information, trimmed to Matt
   assert.equal(device.model, "CGG1H");
   assert.equal(device.serialNumber, "582D34ABCDEF");
   assert.equal(device.firmwareRevision, "1.2.3");
-  assert.deepEqual(device.context, { deviceId: "41:21:14:E5:C2:25" });
+  assert.deepEqual(device.context, {
+    deviceId: "41:21:14:E5:C2:25",
+    matterId: "41:21:14:E5:C2:25",
+  });
 
   const long = build(ALL, { model: "x".repeat(40) }).device;
   assert.equal(long.model.length, 32);

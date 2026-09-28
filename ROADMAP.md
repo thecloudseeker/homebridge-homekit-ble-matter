@@ -4,13 +4,13 @@
 is stable, and every known rough edge is either fixed or knowingly accepted and
 documented.
 
-**Where we are (0.1.0-beta.10):** one Qingping CGG1H, paired and exposed to IKEA
+**Where we are (0.1.0-beta.11):** one Qingping CGG1H, paired and exposed to IKEA
 Dirigera over Matter, on a Raspberry Pi 5 (Homebridge 2.4.0), sharing the
 Bluetooth adapter with two other BLE plugins. Running since 2026-09-26.
 
 ## 0.1.0 — first stable release
 
-Same code as 0.1.0-beta.10, released once a few days of real use look clean:
+Same code as 0.1.0-beta.11, released once a few days of real use look clean:
 
 - [ ] The log stays quiet: at most an occasional `Readings OK again`, no chains of `Reading failed`
 - [ ] Values keep updating in the controller, including across Homebridge restarts
@@ -25,9 +25,13 @@ Same code as 0.1.0-beta.10, released once a few days of real use look clean:
 - [ ] **Choose the Bluetooth adapter** (`bluetoothAdapter`, e.g. `hci1`).
   Straightforward with the D-Bus binding (`withBindings('dbus', { adapterId })`),
   and the clean answer to adapter contention: give this plugin its own USB dongle.
-- [ ] **Verify change-triggered reads on real hardware.** Find out whether the
-  CGG1H bumps its advertised Global State Number when a value changes, or whether
-  only the poll interval applies. Document the answer in the README.
+- [x] **Verify change-triggered reads on real hardware.** The CGG1H bumps its
+  advertised Global State Number when a value changes, so a change is read
+  within a few minutes instead of waiting for the poll interval.
+- [ ] **Disconnect sensors BlueZ still holds at startup.** Shutdown and timeouts
+  now disconnect, but a crash can still leave BlueZ connected to a sensor, which
+  then stops advertising. At startup, disconnect configured sensors that BlueZ
+  reports as `Connected`.
 - [ ] **Test with more than one sensor.** The connection queue and presence
   tracking are designed for it, but only one device has been tested.
 - [ ] **Test or remove `bluetoothBinding: "hci"`.** Raw HCI failed to hold
@@ -44,6 +48,12 @@ Same code as 0.1.0-beta.10, released once a few days of real use look clean:
   upstream. It only reports Bluetooth as unavailable before the adapter is
   up: dbus-next also emits `error` for a single unparsable message, and
   treating that as fatal made noble drop every known device.
+- [ ] **D-Bus match rule leak** (`fixMatchRuleRefcounts` in `lib/hap.js`):
+  dbus-next 0.10.2 checks its match-rule refcount with swapped
+  `hasOwnProperty` arguments, so it never sends `RemoveMatch`. Every device
+  the scan sees leaks a rule until the bus refuses more (2048 per connection)
+  after roughly half a day. Pinned; report upstream and drop the patch once
+  fixed.
 - [ ] **Stale connection state reset** (`releaseStalePeripheral` in `lib/hap.js`):
   plus the patched `disconnect` in the D-Bus guard: noble 2.8.0's D-Bus
   binding never completes a disconnect for a device it holds no connection

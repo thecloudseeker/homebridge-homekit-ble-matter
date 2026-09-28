@@ -1,4 +1,25 @@
 # Changelog
+## 0.1.0-beta.11
+
+**Beta.**
+
+* Fixed a D-Bus leak that, roughly half a day after a start, made BlueZ refuse new signal subscriptions (`not allowed to add more match rules ... max_match_rules_per_connection=2048`). The D-Bus library the plugin uses (dbus-next) never removed a subscription again, so every Bluetooth device the scan saw added one for good. From then on the plugin couldn't follow any device it hadn't seen before, until a restart. This caused the failures that came back every night.
+* A D-Bus error the connection survives is now logged once, then at most every 10 minutes with a count, instead of every time. It could otherwise fill the log with hundreds of lines an hour.
+* Fixed a pairing that took longer than 90 seconds losing its keys for good. The plugin stopped waiting, but the pairing carried on and could still complete - leaving the device paired with keys nobody kept, fixable only by a factory reset. A slow pairing is now waited for up to 3 more minutes, and its keys are kept if it completes. The keys are also saved the moment pairing succeeds; if saving fails, the log says so and it's retried every minute.
+* Fixed a timed-out connection staying open behind the plugin's back: the next connection (and the scan) started while it was still connected, and its late disconnect could cut the next read off. A timed-out connection is now disconnected, and the next one waits until it has ended.
+* A connection in progress is now disconnected when Homebridge shuts down. BlueZ keeps the connection otherwise, and a connected sensor stops advertising until it's power-cycled.
+* A device advertising "not paired" is now only paired again once it keeps doing so for 30 seconds, and the old pairing keys are kept in a backup file (`<DeviceID>.json.bak`) instead of being discarded.
+* New optional `matterId` per device: after a factory reset (which gives the device a new DeviceID), put the old DeviceID there and the device stays the same in your Matter controller, with its room, name and automations.
+* A Matter device whose sensor is removed from the config is now only removed after a day (with the first restart after that), and never while no valid device is configured at all. A typo or a half-saved config no longer deletes devices along with their automations.
+* The plugin now refuses to start, with a clear message, if another plugin in the same Homebridge process already loaded hap-controller: its Bluetooth library can't be replaced then. Run the plugin as a child bridge.
+* Fixed a new device showing 100 °C in IKEA Dirigera right after its first pairing. Without any reading yet, the Matter device was created with an unknown temperature, which Dirigera displays as the top of the range. On the very first setup, the Matter device is now created with the first successful read.
+* Fixed a value change signalled while a read was running being ignored until the next poll (up to `pollInterval` minutes). It's now read afterwards, still at most once every 5 minutes.
+* Fixed the Matter device keeping its old measurements when a device starts reporting different ones (e.g. after a firmware update). It's now re-registered with the new set.
+* Fixed a listener leak in pausing the Bluetooth scan: when the scan was already stopped, every connection left one listener behind, until Node warned about `MaxListenersExceeded`.
+* Connections queued back to back now share one scan pause, instead of restarting the scan between them.
+* The device file (which also holds the pairing keys) is now only rewritten when the readings change, not on every read.
+* Added a display name for the Homebridge plugin list.
+
 ## 0.1.0-beta.10
 
 **Beta.**

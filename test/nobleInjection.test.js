@@ -98,3 +98,10 @@ test("a D-Bus error once the adapter is up does not report Bluetooth as unsuppor
     bindings._state = originalState;
   }
 });
+
+test("the binding's D-Bus connection gets the working match-rule refcount", () => {
+  const { loadHap } = require("../lib/hap");
+  const bindings = loadHap({ binding: "dbus" }).noble._bindings;
+  assert.ok(bindings._bus, "binding was started");
+  assert.ok(bindings._bus.homekitBleMatterMatchRules instanceof Map);
+});

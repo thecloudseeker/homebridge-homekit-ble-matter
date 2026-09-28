@@ -372,7 +372,14 @@ test("a sensor that was reset (advertises unpaired although keys are stored) is 
   device.paired = false; // factory reset
   sensor.handleAdvertisement(advertisement(device));
   await flush();
+  assert.equal(
+    device.calls.includes("pairSetup"),
+    false,
+    "one advertisement isn't enough to discard the keys",
+  );
 
+  t.mock.timers.tick(30 * 1000);
+  await flush();
   assert.ok(lines.warn.some((l) => l.includes("no longer paired")));
   assert.ok(device.calls.includes("pairSetup"));
   assert.equal(device.paired, true);
@@ -380,6 +387,54 @@ test("a sensor that was reset (advertises unpaired although keys are stored) is 
     store.data.get(DEVICE_ID).pairingData.iOSDevicePairingID,
     "ctrl",
   );
+  assert.ok(
+    store.data.get(`${DEVICE_ID}.bak`).pairingData,
+    "the old keys are kept in a backup",
+  );
+});
+
+test("a 'not paired' advertisement that is followed by a paired one again keeps the keys", async (t) => {
+  const device = createFakeDevice();
+  const { sensor, store, lines } = setup(t, {
+    device,
+    store: storeFromPreviousRun(device),
+  });
+  sensor.handleAdvertisement(advertisement(device));
+  await flush();
+
+  sensor.handleAdvertisement(advertisement(device, { availableToPair: true }));
+  t.mock.timers.tick(5 * 1000);
+  sensor.handleAdvertisement(advertisement(device, { availableToPair: false }));
+  t.mock.timers.tick(30 * 1000);
+  await flush();
+
+  assert.equal(device.calls.includes("pairSetup"), false);
+  assert.ok(store.data.get(DEVICE_ID).pairingData);
+  assert.equal(
+    lines.warn.some((l) => l.includes("no longer paired")),
+    false,
+  );
+});
+
+test("the keys are kept if the device wasn't heard live when the 'not paired' flag is confirmed", async (t) => {
+  const device = createFakeDevice();
+  let seen = Date.now();
+  const { sensor, store } = setup(t, {
+    device,
+    store: storeFromPreviousRun(device),
+    lastSeenAt: () => seen,
+  });
+  sensor.handleAdvertisement(advertisement(device));
+  await flush();
+
+  seen = Date.now();
+  sensor.handleAdvertisement(advertisement(device, { availableToPair: true }));
+  // Then it goes quiet (e.g. out of range).
+  t.mock.timers.tick(30 * 1000);
+  await flush();
+
+  assert.equal(device.calls.includes("pairSetup"), false);
+  assert.ok(store.data.get(DEVICE_ID).pairingData);
 });
 
 test("stop() ends polling", async (t) => {
@@ -628,4 +683,188 @@ test("debug logging shows the signal strength for each connection and read", asy
     ),
   );
   assert.ok(lines.debug.some((l) => /Read \(startup, RSSI -78 dBm/.test(l)));
+});
+
+test("on the very first setup the Matter device is only registered once a read succeeded, so it never starts with unknown values", async (t) => {
+  const { sensor, device, ready, readings } = setup(t);
+  device.failNextReads = 1;
+
+  sensor.handleAdvertisement(advertisement(device));
+  await flush();
+  assert.equal(device.paired, true);
+  assert.equal(ready.length, 0, "no readings yet: not registered");
+
+  t.mock.timers.tick(60 * 1000);
+  await flush();
+  assert.equal(ready.length, 1);
+  assert.equal(readings.length, 1);
+  assert.equal(sensor.cachedReadings.temperature, 22.4);
+});
+
+test("with readings from a previous run the Matter device is registered right away, even if the read fails", async (t) => {
+  const device = createFakeDevice();
+  const store = storeFromPreviousRun(device);
+  store.data.get(DEVICE_ID).readings = { temperature: 21.8, humidity: 68 };
+  const { sensor, ready, readings } = setup(t, { device, store });
+  device.failNextReads = 1;
+
+  sensor.handleAdvertisement(advertisement(device));
+  await flush();
+  assert.equal(ready.length, 1);
+  assert.equal(readings.length, 0);
+});
+
+test("a change signalled during a read is read afterwards instead of waiting for the next poll", async (t) => {
+  const device = createFakeDevice();
+  const { sensor, readings } = setup(t, {
+    device,
+    store: storeFromPreviousRun(device),
+    config: { pollInterval: 60 },
+  });
+  sensor.handleAdvertisement(advertisement(device, { GSN: 1 }));
+  await flush();
+  assert.equal(readings.length, 1);
+
+  t.mock.timers.tick(6 * 60 * 1000);
+  let release;
+  device.holdReads = new Promise((resolve) => {
+    release = resolve;
+  });
+  sensor.handleAdvertisement(advertisement(device, { GSN: 2 }));
+  await flush();
+  // The value changes again while that read is still running.
+  sensor.handleAdvertisement(advertisement(device, { GSN: 3 }));
+  device.holdReads = null;
+  release();
+  await flush();
+  assert.equal(readings.length, 2);
+
+  t.mock.timers.tick(5 * 60 * 1000);
+  await flush();
+  assert.equal(
+    readings.length,
+    3,
+    "the change is read, after the 5-minute gap",
+  );
+});
+
+test("the store is only rewritten when the readings changed", async (t) => {
+  const device = createFakeDevice();
+  const store = storeFromPreviousRun(device);
+  let saves = 0;
+  const save = store.save;
+  store.save = (...args) => {
+    saves += 1;
+    return save(...args);
+  };
+  const { sensor, readings } = setup(t, { device, store });
+  sensor.handleAdvertisement(advertisement(device));
+  await flush();
+  assert.equal(saves, 1, "the first readings are new");
+
+  t.mock.timers.tick(10 * 60 * 1000);
+  await flush();
+  assert.equal(readings.length, 2);
+  assert.equal(saves, 1, "same values: not written again");
+
+  device.values[257] = 23.1;
+  t.mock.timers.tick(10 * 60 * 1000);
+  await flush();
+  assert.equal(saves, 2);
+});
+
+test("a pairing that times out but then completes keeps its keys", async (t) => {
+  const { sensor, device, store, lines } = setup(t);
+  let release;
+  device.holdPairing = new Promise((resolve) => {
+    release = resolve;
+  });
+  sensor.handleAdvertisement(advertisement(device));
+  await flush();
+
+  t.mock.timers.tick(90 * 1000);
+  await flush();
+  assert.equal(store.data.get(DEVICE_ID)?.pairingData, undefined);
+
+  // The device completes the pairing two minutes later.
+  t.mock.timers.tick(60 * 1000);
+  release();
+  await flush();
+  assert.equal(device.paired, true);
+  assert.equal(
+    store.data.get(DEVICE_ID).pairingData.iOSDevicePairingID,
+    "ctrl",
+  );
+  assert.ok(lines.info.some((l) => l.includes("Pairing finished late")));
+  assert.equal(
+    device.calls.includes("peripheral:disconnect"),
+    false,
+    "a pairing is never cut off while it may still complete",
+  );
+});
+
+test("after a timed-out read the peripheral is disconnected, and the next connection waits until the read has ended", async (t) => {
+  const device = createFakeDevice();
+  const { sensor } = setup(t, {
+    device,
+    store: storeFromPreviousRun(device),
+  });
+  device.holdReads = new Promise((resolve, reject) => {
+    device.onPeripheralDisconnect = () => reject("Disconnected");
+  });
+  device.holdReads.catch(() => {});
+  sensor.handleAdvertisement(advertisement(device));
+  await flush();
+  const next = sensor.queue.run(async () => device.calls.push("next"));
+
+  t.mock.timers.tick(45 * 1000);
+  await flush();
+  await next;
+  const disconnectAt = device.calls.indexOf("peripheral:disconnect");
+  assert.ok(disconnectAt >= 0, "the peripheral was disconnected");
+  assert.ok(disconnectAt < device.calls.indexOf("next"));
+});
+
+test("stop() disconnects a connection in progress, so BlueZ doesn't keep it after Homebridge exits", async (t) => {
+  const device = createFakeDevice();
+  const { sensor } = setup(t, {
+    device,
+    store: storeFromPreviousRun(device),
+  });
+  device.holdReads = new Promise(() => {});
+  sensor.handleAdvertisement(advertisement(device));
+  await flush();
+
+  sensor.stop();
+  assert.ok(device.calls.includes("peripheral:disconnect"));
+});
+
+test("if the pairing keys can't be saved it says so loudly and keeps retrying", async (t) => {
+  const store = createMemoryStore();
+  const save = store.save;
+  let readOnly = true;
+  store.save = (...args) => {
+    if (readOnly) {
+      throw new Error("EROFS: read-only file system");
+    }
+    return save(...args);
+  };
+  const { sensor, device, lines } = setup(t, { store });
+  sensor.handleAdvertisement(advertisement(device));
+  await flush();
+
+  assert.equal(device.paired, true);
+  assert.ok(lines.error.some((l) => l.includes("pairing keys")));
+  assert.equal(store.data.get(DEVICE_ID), undefined);
+  assert.equal(
+    lines.error.filter((l) => l.includes("Could not save")).length,
+    1,
+    "said once, not on every retry",
+  );
+
+  readOnly = false;
+  t.mock.timers.tick(60 * 1000);
+  await flush();
+  assert.ok(store.data.get(DEVICE_ID)?.pairingData);
+  assert.ok(lines.info.some((l) => l.includes("works again")));
 });

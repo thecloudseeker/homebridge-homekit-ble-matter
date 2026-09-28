@@ -2,7 +2,7 @@ const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const { ConnectionQueue } = require("../lib/connectionQueue");
 
-test("tasks run one at a time, each wrapped in pause/resume", async () => {
+test("queued tasks run one at a time and share one pause/resume", async () => {
   const events = [];
   const queue = new ConnectionQueue({
     pause: async () => events.push("pause"),
@@ -25,12 +25,35 @@ test("tasks run one at a time, each wrapped in pause/resume", async () => {
     "pause",
     "a:start",
     "a:end",
-    "resume",
-    "pause",
     "b:start",
     "b:end",
     "resume",
   ]);
+});
+
+test("a task queued after the queue emptied pauses again", async () => {
+  const events = [];
+  const queue = new ConnectionQueue({
+    pause: async () => events.push("pause"),
+    resume: async () => events.push("resume"),
+  });
+  await queue.run(async () => events.push("a"));
+  await queue.run(async () => events.push("b"));
+  assert.deepEqual(events, ["pause", "a", "resume", "pause", "b", "resume"]);
+});
+
+test("a failing task still resumes scanning once the queue is empty", async () => {
+  const events = [];
+  const queue = new ConnectionQueue({
+    pause: async () => events.push("pause"),
+    resume: async () => events.push("resume"),
+  });
+  await assert.rejects(
+    queue.run(async () => {
+      throw new Error("boom");
+    }),
+  );
+  assert.deepEqual(events, ["pause", "resume"]);
 });
 
 test("a failing task still resumes, rejects, and doesn't block the next one", async () => {

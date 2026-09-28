@@ -166,8 +166,8 @@ test("unconfigured HomeKit BLE devices are announced once with their DeviceID", 
   );
 });
 
-test("a cached Matter device of a sensor that is no longer configured is removed", (t) => {
-  const { platform, api } = setup(t);
+test("a cached Matter device of a sensor that is no longer configured is removed after a day, not right away", (t) => {
+  const { platform, api, lines } = setup(t);
   const stale = {
     UUID: "u1",
     displayName: "Old",
@@ -183,8 +183,92 @@ test("a cached Matter device of a sensor that is no longer configured is removed
 
   platform.configureMatterAccessory(stale);
   platform.configureMatterAccessory(kept);
+  assert.deepEqual([...api.matter.accessories.keys()], ["u1", "u2"]);
+  assert.ok(lines.warn.some((l) => l.includes("no longer in the config")));
 
+  // A restart a day later: still missing, so it goes.
+  t.mock.timers.tick(24 * 60 * 60 * 1000);
+  platform.pendingRemovalsCache = null;
+  platform.configureMatterAccessory(stale);
+  platform.configureMatterAccessory(kept);
   assert.deepEqual([...api.matter.accessories.keys()], ["u2"]);
+});
+
+test("a device that is back in the config before the day is up is kept", (t) => {
+  const { platform, api } = setup(t);
+  const device = {
+    UUID: "u1",
+    displayName: "Bedroom",
+    context: { deviceId: "AA:BB:CC:DD:EE:FF" },
+  };
+  api.matter.accessories.set(device.UUID, device);
+  platform.configureMatterAccessory(device);
+
+  // Fixed the config: the device is configured again.
+  platform.devices.set("AA:BB:CC:DD:EE:FF", {
+    deviceId: "AA:BB:CC:DD:EE:FF",
+    matterId: "AA:BB:CC:DD:EE:FF",
+  });
+  platform.configureMatterAccessory(device);
+  assert.deepEqual(platform.pendingRemovals(), {});
+
+  // Removed from the config later: the day starts over.
+  platform.devices.delete("AA:BB:CC:DD:EE:FF");
+  t.mock.timers.tick(24 * 60 * 60 * 1000);
+  platform.configureMatterAccessory(device);
+  assert.ok(api.matter.accessories.has("u1"));
+});
+
+test("with no valid device configured at all, no cached Matter device is removed", (t) => {
+  const { platform, api, lines } = setup(t, { config: { devices: [] } });
+  const device = {
+    UUID: "u1",
+    displayName: "Bedroom",
+    context: { deviceId: "41:21:14:E5:C2:25" },
+  };
+  api.matter.accessories.set(device.UUID, device);
+  t.mock.timers.tick(7 * 24 * 60 * 60 * 1000);
+  platform.configureMatterAccessory(device);
+
+  assert.ok(api.matter.accessories.has("u1"));
+  assert.deepEqual(platform.pendingRemovals(), {});
+  assert.ok(lines.warn.some((l) => l.includes("No valid devices")));
+});
+
+test("after a factory reset, the old DeviceID as matterId keeps the same Matter device", async (t) => {
+  const device = createFakeDevice({ deviceId: "AA:BB:CC:DD:EE:FF" });
+  const { platform, api } = setup(t, {
+    device,
+    config: {
+      devices: [
+        {
+          deviceId: "AA:BB:CC:DD:EE:FF",
+          matterId: "41:21:14:e5:c2:25",
+          name: "Schlafzimmer",
+          setupCode: "12884842",
+        },
+      ],
+    },
+  });
+  // The Matter device from before the reset, under the old DeviceID.
+  const before = {
+    UUID: "matter-uuid:homebridge-homekit-ble-matter:41:21:14:E5:C2:25",
+    displayName: "Schlafzimmer",
+    context: { deviceId: "41:21:14:E5:C2:25" },
+  };
+  api.matter.accessories.set(before.UUID, before);
+  platform.configureMatterAccessory(before);
+  assert.ok(api.matter.accessories.has(before.UUID), "not removed");
+
+  api.emit("didFinishLaunching");
+  platform.discovery.emit("serviceUp", advertisement(device));
+  await flush();
+
+  assert.deepEqual([...api.matter.accessories.keys()], [before.UUID]);
+  assert.equal(
+    api.matter.accessories.get(before.UUID).context.deviceId,
+    "AA:BB:CC:DD:EE:FF",
+  );
 });
 
 test("a device entry without deviceId is ignored with a warning", (t) => {
@@ -324,4 +408,63 @@ test("after registration, state is only sent once Homebridge had time to finish 
     clusters.includes("bridgedDeviceBasicInformation"),
     "then the name",
   );
+});
+
+test("pausing leaves no scanStop listener behind, even when no scanStop comes", async (t) => {
+  const { platform, api } = setup(t, { withNoble: true });
+  api.emit("didFinishLaunching");
+  const noble = platform.hap.noble;
+  const before = noble.listenerCount("scanStop");
+
+  // Scanning already stopped (e.g. after a failed resume): stop() emits
+  // nothing, so only the 3-second fallback ends the wait.
+  platform.discovery.stop = () => {};
+  for (let i = 0; i < 20; i += 1) {
+    const paused = platform.pauseScanning();
+    t.mock.timers.tick(3000);
+    await paused;
+  }
+  assert.equal(noble.listenerCount("scanStop"), before);
+
+  platform.discovery.stop = () => {
+    throw new Error("adapter gone");
+  };
+  await platform.pauseScanning();
+  assert.equal(noble.listenerCount("scanStop"), before);
+});
+
+test("when the readings a device reports change, its Matter device is re-registered with the new clusters", async (t) => {
+  const { platform, api, device, lines } = setup(t);
+  api.emit("didFinishLaunching");
+  platform.discovery.emit("serviceUp", advertisement(device));
+  await flush();
+  const [before] = api.matter.accessories.values();
+  assert.ok(before.clusters.relativeHumidityMeasurement);
+
+  const [config] = platform.devices.values();
+  const sensor = platform.sensors.get(config.deviceId);
+  const { humidity, ...withoutHumidity } = sensor.cachedDatabase;
+  assert.ok(humidity);
+  platform.ensureMatterSensor(config, withoutHumidity, sensor.cachedInfo);
+  await flush();
+
+  assert.equal(api.matter.accessories.size, 1);
+  const [after] = api.matter.accessories.values();
+  assert.equal(after.clusters.relativeHumidityMeasurement, undefined);
+  assert.ok(after.clusters.temperatureMeasurement);
+  assert.ok(lines.info.some((l) => l.includes("re-registering")));
+});
+
+test("the same readings don't re-register the Matter device", async (t) => {
+  const { platform, api, device } = setup(t);
+  api.emit("didFinishLaunching");
+  platform.discovery.emit("serviceUp", advertisement(device));
+  await flush();
+  const [config] = platform.devices.values();
+  const existing = platform.matterSensors.get(config.deviceId);
+  const sensor = platform.sensors.get(config.deviceId);
+
+  platform.ensureMatterSensor(config, sensor.cachedDatabase, sensor.cachedInfo);
+  await flush();
+  assert.equal(platform.matterSensors.get(config.deviceId), existing);
 });

@@ -41,6 +41,12 @@
               "type": "integer",
               "minimum": 5,
               "description": "Overrides the default below for this device."
+            },
+            "matterId": {
+              "title": "Matter ID (optional)",
+              "type": "string",
+              "placeholder": "Leave empty",
+              "description": "Only needed after a factory reset: a reset gives the device a new DeviceID. Put the new one above and the old DeviceID here, and the device stays the same in your Matter controller (room, name, automations)."
             }
           }
         }
@@ -80,7 +86,8 @@
         "devices[].name",
         "devices[].setupCode",
         "devices[].pollInterval",
-        "devices[].timeout"
+        "devices[].timeout",
+        "devices[].matterId"
       ]
     },
     {

@@ -119,6 +119,12 @@ function advertisement(device, overrides = {}) {
       id: "cb81d1b000a5",
       address: "cb:81:d1:b0:00:a5",
       state: "disconnected",
+      async disconnectAsync() {
+        device.calls.push("peripheral:disconnect");
+        this.state = "disconnected";
+        // Like hap-controller: its watchers give up on a disconnect.
+        device.onPeripheralDisconnect?.();
+      },
     },
     ...overrides,
   };
@@ -178,6 +184,10 @@ function createFakeHap(device, { withNoble = false } = {}) {
       if (pin !== device.setupCode) {
         throw new Error("M4: authentication error");
       }
+      // A promise to hold the pairing on, e.g. to let it finish late.
+      if (device.holdPairing != null) {
+        await device.holdPairing;
+      }
       device.paired = true;
     }
     getLongTermData() {
@@ -211,6 +221,10 @@ function createFakeHap(device, { withNoble = false } = {}) {
         throw "le-connection-abort-by-local";
       }
       this.requirePairing();
+      // A promise to hold reads on, to test what happens mid-read.
+      if (device.holdReads != null) {
+        await device.holdReads;
+      }
       if (device.failNextReads > 0) {
         device.failNextReads -= 1;
         throw "Timeout";
@@ -257,6 +271,8 @@ function createMemoryStore(initial = {}) {
     load: (deviceId) =>
       data.has(deviceId) ? structuredClone(data.get(deviceId)) : null,
     save: (deviceId, value) => data.set(deviceId, structuredClone(value)),
+    backup: (deviceId, value) =>
+      data.set(`${deviceId}.bak`, structuredClone(value)),
   };
 }
 
