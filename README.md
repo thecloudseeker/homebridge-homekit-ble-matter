@@ -4,7 +4,7 @@ Brings **HomeKit-only Bluetooth sensors** to **Matter** controllers such as IKEA
 
 Some sensors only speak HomeKit over Bluetooth (for example the Qingping Temp & RH Monitor **H version, CGG1H**), so only Apple Home can use them. This plugin pairs with such a device the way Apple Home would, reads its values, and exposes it through Homebridge's Matter bridge.
 
-> **Beta.** Tested with a Qingping CGG1H on a Raspberry Pi. Currently supports temperature and humidity sensors (with battery level).
+> Tested with a Qingping CGG1H on a Raspberry Pi 5 with IKEA Dirigera. Currently supports temperature and humidity sensors (with battery level).
 
 ## Requirements
 

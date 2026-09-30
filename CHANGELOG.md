@@ -1,4 +1,21 @@
 # Changelog
+## 0.1.0
+
+First stable release. Same code as 0.1.0-beta.11, which ran for two days without a restart or manual intervention (a Qingping CGG1H, IKEA Dirigera, a Raspberry Pi 5 sharing its Bluetooth adapter with two other BLE plugins).
+
+Coming from 0.1.0-beta.1 (the previous `latest`), the main changes are:
+
+* Bluetooth no longer stops working after about half a day. A bug in the D-Bus library made BlueZ refuse new subscriptions after roughly 12 hours, and reads then failed until a restart.
+* A device that can't be read is reported as **not responding** after `timeout` minutes and keeps its last values, instead of showing an unknown value (IKEA Dirigera displays that as 100 °C). Last values are also kept across restarts.
+* Pairing keys are saved the moment pairing succeeds, a slow pairing no longer loses them, and a device that lost its pairing is only paired again after it keeps advertising "not paired" for 30 seconds (old keys kept as a backup).
+* Timed-out connections, and a connection in progress at shutdown, are disconnected so the sensor keeps advertising.
+* Value changes are picked up within minutes (the sensor's "something changed" signal), on top of polling every `pollInterval` minutes.
+* New optional `matterId` to keep the same Matter device after a factory reset gives the sensor a new DeviceID.
+* A sensor removed from the config keeps its Matter device for a day, so a typo doesn't delete it along with its room and automations.
+* Clearer logs: the first read, recovery, and repeated failures are logged, with signal strength and when the device was last heard.
+
+See the beta entries below for the details.
+
 ## 0.1.0-beta.11
 
 **Beta.**
