@@ -227,7 +227,7 @@ function createFakeHap(device, { withNoble = false } = {}) {
       }
       if (device.failNextReads > 0) {
         device.failNextReads -= 1;
-        throw "Timeout";
+        throw device.readError ?? "Timeout";
       }
       return {
         characteristics: list.map((address) => ({

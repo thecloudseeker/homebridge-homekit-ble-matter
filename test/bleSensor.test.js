@@ -868,3 +868,81 @@ test("if the pairing keys can't be saved it says so loudly and keeps retrying", 
   assert.ok(store.data.get(DEVICE_ID)?.pairingData);
   assert.ok(lines.info.some((l) => l.includes("works again")));
 });
+
+test("a sensor not heard recently isn't connected to; it's read the moment it's heard again", async (t) => {
+  const device = createFakeDevice();
+  // Set once the mocked clock runs (it starts at 0).
+  let seen = 0;
+  const { sensor, readings, lines } = setup(t, {
+    device,
+    store: storeFromPreviousRun(device),
+    lastSeenAt: () => seen,
+  });
+  seen = Date.now();
+  sensor.handleAdvertisement(advertisement(device));
+  await flush(10);
+  assert.equal(readings.length, 1);
+  const reads = () => device.calls.filter((c) => c.startsWith("read")).length;
+  const before = reads();
+
+  // It goes quiet; the next poll doesn't connect.
+  t.mock.timers.tick(10 * 60 * 1000);
+  await flush(10);
+  assert.equal(reads(), before);
+  assert.ok(lines.debug.some((l) => l.includes("Not heard for 10 min")));
+
+  // Heard again: read right away, without waiting for the next poll.
+  seen = Date.now();
+  sensor.handlePresence();
+  await flush(10);
+  assert.equal(reads(), before + 1);
+  assert.equal(readings.length, 2);
+});
+
+test("waiting for a sensor that isn't heard counts toward 'unreachable', with the reason", async (t) => {
+  const device = createFakeDevice();
+  // Set once the mocked clock runs (it starts at 0).
+  let seen = 0;
+  const states = [];
+  const { sensor, lines } = setup(t, {
+    device,
+    store: storeFromPreviousRun(device),
+    lastSeenAt: () => seen,
+    onReachable: (reachable) => states.push(reachable),
+  });
+  seen = Date.now();
+  sensor.handleAdvertisement(advertisement(device));
+  await flush(10);
+  seen = Date.now() - 60 * 1000;
+
+  t.mock.timers.tick(60 * 60 * 1000);
+  await flush(10);
+  assert.deepEqual(states, [false]);
+  assert.ok(
+    lines.warn.some(
+      (l) => l.includes("hasn't been heard for") && l.includes("unreachable"),
+    ),
+  );
+  // No read attempts, so no failure warnings.
+  assert.equal(
+    lines.warn.some((l) => l.includes("Reading failed")),
+    false,
+  );
+});
+
+test("BlueZ's 'interface not found' error is explained", async (t) => {
+  const device = createFakeDevice();
+  const { sensor, lines } = setup(t, {
+    device,
+    store: storeFromPreviousRun(device),
+  });
+  device.failNextReads = 1;
+  device.readError = new Error(
+    "interface not found in proxy object: org.freedesktop.DBus.Properties",
+  );
+  sensor.handleAdvertisement(advertisement(device));
+  await flush(10);
+  assert.ok(
+    lines.warn.some((l) => l.includes("Bluetooth no longer knows the device")),
+  );
+});
