@@ -7,6 +7,11 @@
 * A device with several kinds of sensors (e.g. motion plus light) becomes one Matter device with parts, instead of only its first reading being used. A service a device has twice (e.g. two temperature sensors) becomes its own part. A temperature/humidity sensor stays exactly as before.
 * **Several sensors side by side**: each with its own pairing and Matter device, taking turns on the Bluetooth adapter. A sensor that is out of range or stops answering doesn't hold up the others; only that one is reported as not responding.
 * **Fast updates** (`fastUpdates`, off by default): devices that support HomeKit's encrypted broadcast notifications send changes the moment they happen, without a connection. The plugin asks the device for its broadcast key once and applies each change as it's heard. Devices without support say so once and keep working as before.
+* **Give a device back to Apple Home without a factory reset**: new `removePairing` per device. The plugin removes its pairing from the device, which keeps its DeviceID and can be paired with Apple Home (or this plugin) again.
+* **Calibration**: new `temperatureOffset` and `humidityOffset` per device, added to what the sensor measures.
+* **Choose the Bluetooth adapter**: new `bluetoothAdapter` (e.g. `hci1`), to give the plugin a USB dongle of its own instead of sharing the first adapter.
+* A sensor BlueZ still holds a connection to from a previous run (after a crash) is disconnected at startup, so it advertises again instead of staying invisible until its battery is taken out.
+* **Removed: `bluetoothBinding`.** Bluetooth always goes through BlueZ; raw HCI doesn't hold connections to HomeKit sensors reliably. A leftover `"hci"` setting is ignored with a hint in the log.
 * Change-triggered reads for devices reporting events (contact, motion, occupancy, leak, smoke, CO, CO₂ alarm) now happen within 30 seconds instead of at most every 5 minutes.
 * Characteristics that can't be read (event-only) are skipped instead of failing every read.
 * Includes 0.1.1: a sensor that hasn't been heard for more than 25 seconds isn't connected to, neither for a read nor for setting up fast updates.

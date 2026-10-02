@@ -45,22 +45,18 @@ Same code as 0.1.0-beta.11, released after two days of real use:
 
 ## 0.2.x — close the known gaps
 
-- [ ] **Remove the pairing when a device leaves the config.** Today the only way
-  to free a device is a factory reset, which also gives it a new DeviceID. The
-  plugin should remove its own pairing from the device (hap-controller
-  `removePairing`) so the device can go straight back to Apple Home.
-- [ ] **Choose the Bluetooth adapter** (`bluetoothAdapter`, e.g. `hci1`).
-  Straightforward with the D-Bus binding (`withBindings('dbus', { adapterId })`),
-  and the clean answer to adapter contention: give this plugin its own USB dongle.
+- [x] **Remove the pairing from a device** (`removePairing`), so it can go
+  straight back to Apple Home without a factory reset and keeps its DeviceID.
+- [x] **Choose the Bluetooth adapter** (`bluetoothAdapter`, e.g. `hci1`): the
+  clean answer to adapter contention is a USB dongle of the plugin's own.
 - [x] **Verify change-triggered reads on real hardware.** The CGG1H bumps its
   advertised Global State Number when a value changes, so a change is read
   within a few minutes instead of waiting for the poll interval.
-- [ ] **Disconnect sensors BlueZ still holds at startup.** Shutdown and timeouts
-  now disconnect, but a crash can still leave BlueZ connected to a sensor, which
-  then stops advertising. At startup, disconnect configured sensors that BlueZ
-  reports as `Connected`.
-- [ ] **Test or remove `bluetoothBinding: "hci"`.** Raw HCI failed to hold
-  connections in testing; either confirm a setup where it works or drop the option.
+- [x] **Calibration offsets** for temperature and humidity, per device.
+- [x] **Disconnect sensors BlueZ still holds at startup**, left connected by
+  a crash: a connected sensor stops advertising.
+- [x] **Raw HCI removed** (`bluetoothBinding`): it didn't hold connections;
+  Bluetooth always goes through BlueZ.
 
 ## 0.3.x — settle the workarounds (optional)
 
@@ -93,7 +89,7 @@ Same code as 0.1.0-beta.11, released after two days of real use:
 
 - [ ] **2–4 weeks** of continuous operation without manual intervention
 - [ ] Tested with **two Matter controllers** (IKEA Dirigera plus Apple Home or Google Home)
-- [ ] Pairing removal and adapter selection shipped; no configuration changes planned
+- [x] Pairing removal and adapter selection shipped; no configuration changes planned
 - [ ] README covers supported devices, setup, troubleshooting and known limitations
 - [ ] Scope stated: **read-only HomeKit Bluetooth sensors**.
 

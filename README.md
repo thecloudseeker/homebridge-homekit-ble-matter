@@ -61,7 +61,10 @@ The pairing keys are stored in `<Homebridge storage>/homekit-ble-matter/`, one f
 | `fastUpdates` | `false` | Let devices send changes the moment they happen (HomeKit broadcast notifications) instead of only on the next read (also per device). |
 | `pollInterval` | `10` | Minutes between reads (also per device). |
 | `timeout` | `60` | Minutes without a successful read before the device is reported as not responding; it keeps its last values (also per device). |
-| `bluetoothBinding` | `dbus` | How the adapter is accessed: `dbus` (BlueZ, recommended) or `hci` (raw HCI, needs root or network capabilities). |
+| `devices[].temperatureOffset` | `0` | Added to the measured temperature in °C, e.g. `-0.5` for a sensor that reads half a degree too high. |
+| `devices[].humidityOffset` | `0` | Added to the measured humidity in percentage points, e.g. `3` for a sensor that reads 3 % too low. |
+| `devices[].removePairing` | `false` | Removes this plugin's pairing from the device, so it can go back to Apple Home (see below). |
+| `bluetoothAdapter` | first adapter | The Bluetooth adapter to use, e.g. `hci1` for a USB dongle of its own. |
 
 ## How it works
 
@@ -74,6 +77,9 @@ The pairing keys are stored in `<Homebridge storage>/homekit-ble-matter/`, one f
 - **A factory reset gives a HomeKit device a new DeviceID.** Put the new DeviceID from the log in the config, and the old one in `matterId`: the device then stays the same in your Matter controller, with its room, name and automations. Without `matterId` it shows up as a new device. If a configured device isn't seen within two minutes of startup, or its reads keep failing, the log says so and names any unconfigured device available to pair as the likely new DeviceID.
 - If pairing is removed without a reset (the DeviceID stays the same), the plugin notices and pairs again with the configured setup code. It only acts once the device has kept advertising "not paired" for 30 seconds, and keeps the old pairing keys in a backup file (`<DeviceID>.json.bak`).
 - A Matter device whose sensor is removed from the config is kept for a day (and removed with the first restart after that), so a typo or a half-saved config doesn't delete it along with its room and automations. With no valid device configured at all, nothing is removed.
+- **Giving a device back to Apple Home** needs no factory reset: set `removePairing` on it and restart. The plugin removes its pairing from the device and says `Pairing removed` in the log; the device can then be added to Apple Home with its setup code, and its entry deleted from the config. Its DeviceID stays the same, so it can come back later just as easily.
+- **A Bluetooth adapter of its own**: with `bluetoothAdapter` (e.g. `hci1`) the plugin uses that adapter instead of the first one, so it doesn't share airtime with other Bluetooth plugins. `hciconfig` or `bluetoothctl list` shows the adapters; if the chosen one isn't there, the log says which one is used instead.
+- At startup, a sensor BlueZ still holds a connection to from a previous run (after a crash) is disconnected, so it advertises again instead of staying invisible until its battery is taken out.
 - Pairing keys are saved the moment pairing succeeds. If that fails (e.g. a read-only file system), the log says so and it's retried every minute: don't restart Homebridge until it works, or the keys are lost.
 - A read only connects if the sensor was heard in the last 25 seconds (BlueZ forgets a device it hasn't heard for about 30); otherwise it waits and reads the moment the sensor is heard again.
 - A failed read is retried after a minute; after five failures in a row, only every `pollInterval` minutes. A failed pairing is retried after 1, 2, 5, then every 10 minutes.
@@ -85,14 +91,14 @@ The pairing keys are stored in `<Homebridge storage>/homekit-ble-matter/`, one f
 
 - **Pairing keeps failing / the device is no longer found:** Bluetooth sensors can get stuck after a failed connection attempt: they stop advertising and refuse connections. Take the battery out for about 10 seconds and put it back (a restart, *not* a factory reset, which would change the DeviceID). The plugin retries by itself.
 - **"Already paired with another HomeKit controller":** remove the device from Apple Home first.
-- **"Bluetooth via BlueZ (D-Bus) is not available":** start the bluetooth service (`sudo systemctl start bluetooth`) and make sure the Homebridge user is in the `bluetooth` group, or switch Bluetooth Access to raw HCI.
+- **"Bluetooth via BlueZ (D-Bus) is not available":** start the bluetooth service (`sudo systemctl start bluetooth`) and make sure the Homebridge user is in the `bluetooth` group.
 - **Reads keep failing:** turn on debug logging for the child bridge. Every connection then logs the signal strength and when the device was last heard, e.g. `Connecting (RSSI -78 dBm, heard 2s ago)`. Connections tend to become unreliable below about -85 dBm; moving the device and the Bluetooth adapter closer together helps.
 - **"Not seen since startup":** the device is out of range, out of battery, or was factory-reset and has a new DeviceID (the warning names the likely one).
 
 ## Known limitations
 
 - **New Matter `uniqueId` after each restart** for temperature+humidity devices, due to a Homebridge limitation ([homebridge/homebridge#4018](https://github.com/homebridge/homebridge/issues/4018)). IKEA Dirigera keeps the device, name and room across restarts.
-- **Bluetooth is shared** with any other Bluetooth plugin on the same adapter. The plugin works alongside other scanning plugins; on a busy adapter a connection can fail now and then, and a failed read is retried after a minute.
+- **Bluetooth is shared** with any other Bluetooth plugin on the same adapter. The plugin works alongside other scanning plugins; on a busy adapter a connection can fail now and then, and a failed read is retried after a minute. A second adapter (`bluetoothAdapter`) avoids that.
 - Without `fastUpdates` (or on a device that doesn't support it), changes are picked up by the advertised state number plus polling: seconds to minutes, not instant.
 
 ## Dependencies

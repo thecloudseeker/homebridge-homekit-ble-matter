@@ -1003,3 +1003,112 @@ test("fast updates aren't set up while the sensor has gone quiet; the next read 
   assert.equal(readings.length, 2);
   assert.equal(setUps, 1);
 });
+
+test("removePairing removes the pairing from the device, keeps the keys as a backup, and stops using it", async (t) => {
+  const device = createFakeDevice();
+  const { sensor, lines, readings, store } = setup(t, {
+    device,
+    store: storeFromPreviousRun(device),
+    config: { removePairing: true },
+  });
+  sensor.handleAdvertisement(advertisement(device));
+  await flush(10);
+
+  assert.deepEqual(
+    device.calls.filter((c) => !c.startsWith("scan:")),
+    ["removePairing:ctrl"],
+  );
+  assert.equal(device.paired, false);
+  assert.equal(store.load(DEVICE_ID).pairingData, null);
+  assert.deepEqual(store.data.get(`${DEVICE_ID}.bak`).pairingData, {
+    iOSDevicePairingID: "ctrl",
+  });
+  assert.ok(lines.info.some((l) => l.includes("can be added to Apple Home")));
+
+  // It now advertises "not paired": neither paired again nor read.
+  sensor.handleAdvertisement(advertisement(device, { GSN: 2 }));
+  t.mock.timers.tick(60 * 60 * 1000);
+  await flush(10);
+  assert.deepEqual(
+    device.calls.filter((c) => !c.startsWith("scan:")),
+    ["removePairing:ctrl"],
+  );
+  assert.equal(readings.length, 0);
+});
+
+test("removePairing on a device that failed to answer is retried", async (t) => {
+  const device = createFakeDevice();
+  device.failNextPairs = 1;
+  const { sensor, lines } = setup(t, {
+    device,
+    store: storeFromPreviousRun(device),
+    config: { removePairing: true },
+  });
+  sensor.handleAdvertisement(advertisement(device));
+  await flush(10);
+  assert.equal(device.paired, true);
+  assert.ok(lines.warn.some((l) => l.includes("retrying in 1 min")));
+
+  t.mock.timers.tick(60 * 1000);
+  await flush(10);
+  assert.equal(device.paired, false);
+});
+
+test("removePairing on a device this plugin never paired with does nothing but say so, once", async (t) => {
+  const device = createFakeDevice();
+  const { sensor, lines } = setup(t, {
+    device,
+    config: { removePairing: true },
+  });
+  sensor.handleAdvertisement(advertisement(device));
+  sensor.handleAdvertisement(advertisement(device, { GSN: 2 }));
+  await flush(10);
+  assert.deepEqual(
+    device.calls.filter((c) => !c.startsWith("scan:")),
+    [],
+  );
+  assert.equal(
+    lines.info.filter((l) => l.includes("Not paired with this plugin")).length,
+    1,
+  );
+});
+
+test("the Bluetooth address is remembered with the pairing, for the next startup", async (t) => {
+  const { sensor, device, store } = setup(t);
+  sensor.handleAdvertisement(advertisement(device));
+  await flush(10);
+  assert.equal(store.load(DEVICE_ID).address, "cb:81:d1:b0:00:a5");
+  assert.equal(sensor.bluetoothAddress, "cb:81:d1:b0:00:a5");
+});
+
+test("temperatureOffset and humidityOffset correct what the sensor measures", async (t) => {
+  const device = createFakeDevice();
+  device.values[257] = 21.799999237060547;
+  device.values[145] = 98;
+  const { sensor, readings, store } = setup(t, {
+    device,
+    config: { temperatureOffset: -0.5, humidityOffset: 3 },
+  });
+  sensor.handleAdvertisement(advertisement(device));
+  await flush(10);
+
+  // Humidity stays within 0-100 %; battery is untouched.
+  assert.deepEqual(readings.at(-1), {
+    temperature: 21.3,
+    humidity: 100,
+    batteryLevel: 86,
+    lowBattery: false,
+  });
+  // Also what a restart starts from.
+  assert.equal(store.load(DEVICE_ID).readings.temperature, 21.3);
+});
+
+test("an offset that isn't a number is ignored", async (t) => {
+  const { sensor, device, readings } = setup(t, {
+    config: { temperatureOffset: "warm", humidityOffset: null },
+  });
+  sensor.handleAdvertisement(advertisement(device));
+  await flush(10);
+  assert.equal(readings.at(-1).temperature, 22.4);
+  assert.equal(readings.at(-1).humidity, 60.5);
+});

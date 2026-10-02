@@ -4,6 +4,9 @@ const {
   parseAccessoryDatabase,
   normalizeSetupCode,
   normalizeDeviceId,
+  normalizeAdapter,
+  connectedDevices,
+  disconnectLeftovers,
 } = require("../lib/hap");
 const { createFakeHap, createFakeDevice } = require("./helpers/fakeHap");
 
@@ -241,4 +244,75 @@ test("parseAccessoryDatabase skips characteristics that can't be read", () => {
     hap,
   );
   assert.deepEqual(Object.keys(readings), ["leak"]);
+});
+
+test("normalizeAdapter accepts BlueZ adapter names only", () => {
+  assert.equal(normalizeAdapter("hci1"), "hci1");
+  assert.equal(normalizeAdapter(" HCI0 "), "hci0");
+  for (const value of [undefined, "", "1", "usb", "hci", "hci1; rm"]) {
+    assert.equal(normalizeAdapter(value), null);
+  }
+});
+
+// BlueZ's object tree as noble's D-Bus binding keeps it.
+function bluezObjects() {
+  const device = (Address, Connected) => ({
+    "org.bluez.Device1": { Address, Connected },
+  });
+  return new Map([
+    ["/org/bluez/hci0", { "org.bluez.Adapter1": {} }],
+    ["/org/bluez/hci0/dev_CB_81", device("CB:81:D1:B0:00:A5", true)],
+    ["/org/bluez/hci0/dev_AA_01", device("AA:AA:AA:AA:AA:01", false)],
+    ["/org/bluez/hci0/dev_BB_02", device("BB:BB:BB:BB:BB:02", true)],
+    ["/org/bluez/hci1/dev_CC_03", device("CC:CC:CC:CC:CC:03", true)],
+  ]);
+}
+
+test("connectedDevices: only our sensors, only connected ones, only on our adapter", () => {
+  assert.deepEqual(
+    connectedDevices(bluezObjects(), "/org/bluez/hci0", [
+      "cb:81:d1:b0:00:a5",
+      "AA:AA:AA:AA:AA:01",
+      "CC:CC:CC:CC:CC:03",
+    ]),
+    [["CB:81:D1:B0:00:A5", "/org/bluez/hci0/dev_CB_81"]],
+  );
+  assert.deepEqual(connectedDevices(undefined, "/org/bluez/hci0", ["x"]), []);
+  assert.deepEqual(connectedDevices(bluezObjects(), null, ["x"]), []);
+});
+
+test("disconnectLeftovers disconnects them through BlueZ and reports a failure as a warning", async () => {
+  const { EventEmitter } = require("events");
+  const disconnected = [];
+  const noble = new EventEmitter();
+  noble._bindings = {
+    _objects: bluezObjects(),
+    _adapterPath: "/org/bluez/hci0",
+    _bus: {
+      getProxyObject: async (service, path) => ({
+        getInterface: () => ({
+          Disconnect: async () => {
+            if (path.endsWith("BB_02")) {
+              throw new Error("org.bluez.Error.Failed");
+            }
+            disconnected.push(path);
+          },
+        }),
+      }),
+    },
+  };
+  const warnings = [];
+  noble.on("warning", (message) => warnings.push(message));
+
+  const done = await disconnectLeftovers(noble, [
+    "CB:81:D1:B0:00:A5",
+    "BB:BB:BB:BB:BB:02",
+  ]);
+  assert.deepEqual(done, ["CB:81:D1:B0:00:A5"]);
+  assert.deepEqual(disconnected, ["/org/bluez/hci0/dev_CB_81"]);
+  assert.equal(warnings.length, 1);
+  assert.ok(warnings[0].includes("BB:BB:BB:BB:BB:02"));
+
+  // Without a D-Bus connection there is nothing to do.
+  assert.deepEqual(await disconnectLeftovers({}, ["CB:81:D1:B0:00:A5"]), []);
 });

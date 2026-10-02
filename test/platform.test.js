@@ -5,6 +5,7 @@ const os = require("os");
 const path = require("path");
 const { EventEmitter } = require("events");
 const { createFakeMatter } = require("./helpers/fakeMatter");
+const { DeviceStore } = require("../lib/deviceStore");
 const {
   hapDatabase,
   createFakeDevice,
@@ -33,16 +34,27 @@ function setup(
     device = createFakeDevice(),
     withNoble = false,
     configureBroadcasts,
+    // Device state from a previous run: {DeviceID: state}.
+    stored = {},
+    // Extra members of the hap object, e.g. disconnectLeftovers.
+    hapExtras = {},
   } = {},
 ) {
   t.mock.timers.enable({ apis: ["setTimeout", "setInterval", "Date"] });
   const storagePath = fs.mkdtempSync(path.join(os.tmpdir(), "hkblematter-"));
   t.after(() => fs.rmSync(storagePath, { recursive: true, force: true }));
-  const hap = createFakeHap(device, { withNoble });
+  const hap = Object.assign(createFakeHap(device, { withNoble }), hapExtras);
+  const store = new DeviceStore(path.join(storagePath, "homekit-ble-matter"));
+  for (const [deviceId, state] of Object.entries(stored)) {
+    store.save(deviceId, state);
+  }
   const { HomeKitBleMatterPlatform } = require("../lib/platform")(
     {},
     {
-      loadHap: () => hap,
+      loadHap: (options) => {
+        hap.loadOptions = options;
+        return hap;
+      },
       configureBroadcasts,
     },
   );
@@ -938,4 +950,78 @@ test("several sensors: one out of range isn't connected to, the others are read,
     lastState(api, "Hallway", "occupancySensing").occupancy.occupied,
     true,
   );
+});
+
+test("bluetoothAdapter picks the Bluetooth adapter", (t) => {
+  const { platform, api } = setup(t, { config: { bluetoothAdapter: "HCI1" } });
+  api.emit("didFinishLaunching");
+  assert.deepEqual(platform.hap.loadOptions, { adapter: "hci1" });
+});
+
+test("a bluetoothAdapter that isn't an adapter name is ignored with a warning", (t) => {
+  const { platform, api, lines } = setup(t, {
+    config: { bluetoothAdapter: "usb dongle" },
+  });
+  api.emit("didFinishLaunching");
+  assert.deepEqual(platform.hap.loadOptions, { adapter: null });
+  assert.ok(lines.warn.some((l) => l.includes("'usb dongle'")));
+});
+
+test("a chosen adapter that doesn't exist is reported, naming the one used instead", (t) => {
+  const { platform, api, lines } = setup(t, {
+    config: { bluetoothAdapter: "hci1" },
+    withNoble: true,
+    hapExtras: { adapterInUse: () => "hci0" },
+  });
+  api.emit("didFinishLaunching");
+  platform.hap.noble.emit("stateChange", "poweredOn");
+  assert.ok(
+    lines.warn.some((l) => l.includes("hci1 not found; using hci0 instead")),
+  );
+});
+
+test("the old raw HCI setting is ignored with a hint", (t) => {
+  const { platform, api, lines } = setup(t, {
+    config: { bluetoothBinding: "hci" },
+  });
+  api.emit("didFinishLaunching");
+  assert.deepEqual(platform.hap.loadOptions, { adapter: null });
+  assert.ok(lines.warn.some((l) => l.includes("no longer supported")));
+});
+
+test("a sensor BlueZ still holds a connection to from a previous run is disconnected at startup, once", async (t) => {
+  const asked = [];
+  const { platform, api, lines } = setup(t, {
+    withNoble: true,
+    stored: {
+      "41:21:14:E5:C2:25": {
+        pairingData: { iOSDevicePairingID: "ctrl" },
+        address: "cb:81:d1:b0:00:a5",
+      },
+    },
+    hapExtras: {
+      disconnectLeftovers: async (addresses) => {
+        asked.push(addresses);
+        return addresses;
+      },
+    },
+  });
+  api.emit("didFinishLaunching");
+  platform.hap.noble.emit("stateChange", "poweredOn");
+  await flush();
+  assert.deepEqual(asked, [["CB:81:D1:B0:00:A5"]]);
+  assert.ok(
+    lines.info.some(
+      (l) =>
+        l.includes("[Schlafzimmer]") &&
+        l.includes("still connected from a previous run"),
+    ),
+  );
+
+  // The adapter coming back later (e.g. toggled) doesn't do it again: by
+  // then a connection may be our own.
+  platform.hap.noble.emit("stateChange", "poweredOff");
+  platform.hap.noble.emit("stateChange", "poweredOn");
+  await flush();
+  assert.equal(asked.length, 1);
 });

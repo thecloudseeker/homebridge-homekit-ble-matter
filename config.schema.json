@@ -47,11 +47,28 @@
               "type": "boolean",
               "description": "Overrides the default below for this device."
             },
+            "temperatureOffset": {
+              "title": "Temperature Offset (°C)",
+              "type": "number",
+              "placeholder": "0",
+              "description": "Added to the measured temperature, e.g. -0.5 if the sensor reads half a degree too high."
+            },
+            "humidityOffset": {
+              "title": "Humidity Offset (%)",
+              "type": "number",
+              "placeholder": "0",
+              "description": "Added to the measured humidity, in percentage points, e.g. 3 if the sensor reads 3 % too low."
+            },
             "matterId": {
               "title": "Matter ID (optional)",
               "type": "string",
               "placeholder": "Leave empty",
               "description": "Only needed after a factory reset: a reset gives the device a new DeviceID. Put the new one above and the old DeviceID here, and the device stays the same in your Matter controller (room, name, automations)."
+            },
+            "removePairing": {
+              "title": "Remove pairing",
+              "type": "boolean",
+              "description": "Removes this plugin's pairing from the device, so it can be added to Apple Home again without a factory reset. Turn it on, restart, wait for 'Pairing removed' in the log, then delete the device here."
             }
           }
         }
@@ -76,15 +93,11 @@
         "default": false,
         "description": "Let devices send changes the moment they happen (HomeKit broadcast notifications), instead of only on the next read - what door, motion and leak sensors need. Devices that don't support it keep working as before."
       },
-      "bluetoothBinding": {
-        "title": "Bluetooth Access",
+      "bluetoothAdapter": {
+        "title": "Bluetooth Adapter",
         "type": "string",
-        "default": "dbus",
-        "oneOf": [
-          { "title": "BlueZ (D-Bus) - recommended", "enum": ["dbus"] },
-          { "title": "Raw HCI (needs root or network capabilities)", "enum": ["hci"] }
-        ],
-        "description": "How the plugin talks to the Bluetooth adapter. BlueZ is more reliable for connections; raw HCI is the old behaviour of the underlying library."
+        "placeholder": "e.g. hci1",
+        "description": "Which Bluetooth adapter to use, e.g. hci1 for a USB dongle of its own. Leave empty for the first one (hci0)."
       }
     }
   },
@@ -99,14 +112,17 @@
         "devices[].pollInterval",
         "devices[].timeout",
         "devices[].fastUpdates",
-        "devices[].matterId"
+        "devices[].temperatureOffset",
+        "devices[].humidityOffset",
+        "devices[].matterId",
+        "devices[].removePairing"
       ]
     },
     {
       "type": "fieldset",
       "title": "Defaults",
       "expandable": true,
-      "items": ["pollInterval", "timeout", "fastUpdates", "bluetoothBinding"]
+      "items": ["pollInterval", "timeout", "fastUpdates", "bluetoothAdapter"]
     }
   ]
 }

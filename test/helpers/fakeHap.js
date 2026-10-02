@@ -270,6 +270,16 @@ function createFakeHap(deviceOrDevices, { withNoble = false } = {}) {
         iOSDevicePairingID: "ctrl",
       };
     }
+    async removePairing(identifier) {
+      const device = this.device;
+      device.calls.push(`removePairing:${identifier}`);
+      if (device.failNextPairs > 0) {
+        device.failNextPairs -= 1;
+        throw "Timeout";
+      }
+      this.requirePairing();
+      device.paired = false;
+    }
     async getAccessories() {
       const device = this.device;
       device.calls.push("getAccessories");
