@@ -175,7 +175,7 @@ function advertisement(device, overrides = {}) {
     CN: 1,
     availableToPair: !device.paired,
     peripheral: {
-      id: "cb81d1b000a5",
+      id: device.peripheralId ?? "cb81d1b000a5",
       address: "cb:81:d1:b0:00:a5",
       state: "disconnected",
       async disconnectAsync() {
@@ -191,7 +191,12 @@ function advertisement(device, overrides = {}) {
 
 // `withNoble`: also expose a fake noble instance (scanStart/discover events),
 // as loadHap does, so the platform's live-advertisement tracking is active.
-function createFakeHap(device, { withNoble = false } = {}) {
+// Several devices can be passed as an array: a client then talks to the one
+// with its DeviceID. `stats.maxOpen` is the most clients open at once.
+function createFakeHap(deviceOrDevices, { withNoble = false } = {}) {
+  const devices = [].concat(deviceOrDevices);
+  const device = devices[0];
+  const stats = { open: 0, maxOpen: 0 };
   // Like noble's D-Bus binding: starting/stopping a scan emits
   // scanStart/scanStop on the noble instance.
   const noble = withNoble ? new EventEmitter() : undefined;
@@ -225,13 +230,22 @@ function createFakeHap(device, { withNoble = false } = {}) {
       this.peripheral = peripheral;
       this.pairingData = pairingData;
       this.closed = false;
+      this.device =
+        devices.find(
+          (candidate) =>
+            candidate.deviceId.toLowerCase() === String(deviceId).toLowerCase(),
+        ) ?? device;
+      stats.open += 1;
+      stats.maxOpen = Math.max(stats.maxOpen, stats.open);
     }
     requirePairing() {
+      const device = this.device;
       if (!device.paired || this.pairingData?.iOSDevicePairingID !== "ctrl") {
         throw new Error("M2: authentication error");
       }
     }
     async pairSetup(pin) {
+      const device = this.device;
       device.calls.push("pairSetup");
       if (device.scanningDuringConnect?.()) {
         throw "le-connection-abort-by-local";
@@ -250,17 +264,20 @@ function createFakeHap(device, { withNoble = false } = {}) {
       device.paired = true;
     }
     getLongTermData() {
+      const device = this.device;
       return {
         AccessoryPairingID: device.deviceId,
         iOSDevicePairingID: "ctrl",
       };
     }
     async getAccessories() {
+      const device = this.device;
       device.calls.push("getAccessories");
       this.requirePairing();
       return device.database;
     }
     async getCharacteristics(list) {
+      const device = this.device;
       device.calls.push(`read:${list.map((a) => a.iid).join(",")}`);
       // Like hap-controller on noble 2's D-Bus binding: a peripheral left in
       // 'error'/'disconnecting' by a failed connect never finishes the
@@ -296,6 +313,9 @@ function createFakeHap(device, { withNoble = false } = {}) {
       };
     }
     async close() {
+      if (!this.closed) {
+        stats.open -= 1;
+      }
       this.closed = true;
     }
   }
@@ -309,6 +329,7 @@ function createFakeHap(device, { withNoble = false } = {}) {
       NAMES[uuid] ?? Characteristic.characteristicFromUuid(uuid),
     serviceFromUuid: (uuid) => NAMES[uuid] ?? Service.serviceFromUuid(uuid),
     noble,
+    stats,
   };
 }
 

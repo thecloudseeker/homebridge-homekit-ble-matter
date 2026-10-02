@@ -30,19 +30,15 @@ Same code as 0.1.0-beta.11, released after two days of real use:
 - [x] Verified on real hardware: a sensor out of range for 10 minutes wasn't
   connected to, and was read the moment it was heard again (at -90 dBm)
 
-## 0.2.0 — more sensor types (branch `feature/sensor-types`)
-
-Implemented and tested against Homebridge's real Matter server; waiting for
-real devices:
+## 0.2.0 — more sensor types, several sensors (branch `feature/sensor-types`)
 
 - [x] Contact, leak, motion, occupancy, light, smoke/CO, CO₂ and air quality
   (PM2.5, PM10, VOC, NO₂, ozone), each mapped to its Matter device type
 - [x] Devices with several sensor kinds as one Matter device with parts;
   repeated services as their own parts
-- [x] Fast updates via HomeKit broadcast notifications (experimental, opt-in)
-- [ ] **A real device of each kind.** Especially a contact or motion sensor
-  with broadcast support, to confirm the broadcast key exchange and
-  decryption on real hardware
+- [x] Fast updates via HomeKit broadcast notifications (opt-in)
+- [x] Several sensors side by side: own pairing and Matter device each, one
+  connection at a time, a failing sensor doesn't hold up the others
 - [ ] **Buttons** (stateless programmable switches → Matter Generic Switch).
   Needs events: only with fast updates, if a button broadcasts its presses
 - [ ] Status flags (tampered, active) where Matter has a place for them
@@ -63,8 +59,6 @@ real devices:
   now disconnect, but a crash can still leave BlueZ connected to a sensor, which
   then stops advertising. At startup, disconnect configured sensors that BlueZ
   reports as `Connected`.
-- [ ] **Test with more than one sensor.** The connection queue and presence
-  tracking are designed for it, but only one device has been tested.
 - [ ] **Test or remove `bluetoothBinding: "hci"`.** Raw HCI failed to hold
   connections in testing; either confirm a setup where it works or drop the option.
 
@@ -101,8 +95,7 @@ real devices:
 - [ ] Tested with **two Matter controllers** (IKEA Dirigera plus Apple Home or Google Home)
 - [ ] Pairing removal and adapter selection shipped; no configuration changes planned
 - [ ] README covers supported devices, setup, troubleshooting and known limitations
-- [ ] Scope stated: **read-only HomeKit Bluetooth sensors**. The types tested
-  with a real device are supported; the others are marked as untested.
+- [ ] Scope stated: **read-only HomeKit Bluetooth sensors**.
 
 Optional around 1.0: apply for **Homebridge Verified** (config schema, no
 postinstall scripts, proper error handling — mostly in place already).

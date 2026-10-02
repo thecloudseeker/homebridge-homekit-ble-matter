@@ -257,3 +257,67 @@ test("a part with temperature and humidity keeps both device types", async () =>
     5500,
   );
 });
+
+test("several sensors registered together stay separate devices with their own values", async () => {
+  const make = (name, capabilities, readings) => {
+    counter += 1;
+    return new MatterSensor(real.matter, createSilentLog(), {
+      deviceId: `AA:BB:CC:DD:EE:${String(counter).padStart(2, "0")}`,
+      name,
+      capabilities,
+      info: { manufacturer: "Test", model: "Kind" },
+      readings,
+    });
+  };
+  const bedroom = make("Bedroom", ["humidity", "temperature"], {
+    temperature: 20,
+    humidity: 50,
+  });
+  const door = make("Front door", ["batteryLevel", "contact"], {
+    contact: true,
+    batteryLevel: 90,
+  });
+  const hallway = make("Hallway", ["lightLevel", "motion"], {
+    motion: false,
+    lightLevel: 100,
+  });
+  await real.matter.registerPlatformAccessories(
+    "@thecloudseeker/homebridge-homekit-ble-matter",
+    "HomeKitBleMatter",
+    [bedroom, door, hallway].flatMap((sensor) => sensor.toAccessories()),
+  );
+  for (const sensor of [bedroom, door, hallway]) {
+    sensor.markRegistered();
+  }
+  await Promise.all([
+    bedroom.update({ temperature: 18.5, humidity: 61 }),
+    door.update({ contact: false, batteryLevel: 89 }),
+    hallway.update({ motion: true, lightLevel: 1000 }),
+  ]);
+  const state = (sensor, cluster, partId) =>
+    real.matter.getAccessoryState(sensor.accessory.UUID, cluster, partId);
+
+  assert.equal(
+    (await state(bedroom, "temperatureMeasurement")).measuredValue,
+    1850,
+  );
+  assert.equal((await state(door, "booleanState")).stateValue, false);
+  assert.equal((await state(door, "powerSource")).batPercentRemaining, 178);
+  assert.equal(
+    (await state(hallway, "occupancySensing")).occupancy.occupied,
+    true,
+  );
+  assert.equal(
+    (await state(hallway, "illuminanceMeasurement", "light")).measuredValue,
+    30001,
+  );
+
+  // One going unreachable leaves the others reachable.
+  await door.setReachable(false);
+  const reachable = async (sensor) =>
+    (await state(sensor, "bridgedDeviceBasicInformation")).reachable;
+  assert.deepEqual(
+    [await reachable(bedroom), await reachable(door), await reachable(hallway)],
+    [true, false, true],
+  );
+});

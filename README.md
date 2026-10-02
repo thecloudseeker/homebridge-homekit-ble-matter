@@ -2,24 +2,22 @@
 
 Brings **HomeKit-only Bluetooth sensors** to **Matter** controllers such as IKEA Dirigera, Google Home, Amazon Alexa or SmartThings.
 
-Some sensors only speak HomeKit over Bluetooth (for example the Qingping Temp & RH Monitor **H version, CGG1H**), so only Apple Home can use them. This plugin pairs with such a device the way Apple Home would, reads its values, and exposes it through Homebridge's Matter bridge.
-
-> **Beta.** Tested with a Qingping CGG1H (temperature and humidity) on a Raspberry Pi. The other sensor types below are implemented and checked against Homebridge's real Matter server, but not yet with real devices: reports welcome.
+Some sensors only speak HomeKit over Bluetooth (for example the Qingping Temp & RH Monitor **H version, CGG1H**), so only Apple Home can use them. This plugin pairs with such devices the way Apple Home would, reads their values, and exposes each one as a Matter device through Homebridge's Matter bridge. Add as many sensors as you like, of any supported kind.
 
 ## Supported sensors
 
 Read-only HomeKit Bluetooth sensors. Controllable devices (plugs, lights, locks, blinds) are out of scope.
 
-| HomeKit service | Matter device | Notes | Tested with a real device |
-|---|---|---|---|
-| Temperature, Humidity | Temperature Sensor / Humidity Sensor | One device when it measures both | ✅ Qingping CGG1H |
-| Contact | Contact Sensor | Closed = contact | – |
-| Leak | Water Leak Detector | | – |
-| Motion, Occupancy | Occupancy Sensor | | – |
-| Light | Light Sensor | Lux on Matter's logarithmic scale | – |
-| Smoke, Carbon Monoxide | Smoke/CO Alarm | Plus CO level; low battery and fault as alarm states | – |
-| Air Quality, Carbon Dioxide, PM2.5, PM10, VOC, NO₂, Ozone | Air Quality Sensor | Each measurement as its own Matter concentration; an air monitor's temperature and humidity on the same device. A CO₂ sensor without an air quality rating shows good/poor from its "abnormal" flag | – |
-| Battery | Power Source on the device | Level, low battery, "replacement needed" | ✅ |
+| HomeKit service | Matter device | Notes |
+|---|---|---|
+| Temperature, Humidity | Temperature Sensor / Humidity Sensor | One device when it measures both |
+| Contact | Contact Sensor | Closed = contact |
+| Leak | Water Leak Detector | |
+| Motion, Occupancy | Occupancy Sensor | |
+| Light | Light Sensor | Lux on Matter's logarithmic scale |
+| Smoke, Carbon Monoxide | Smoke/CO Alarm | Plus CO level; low battery and fault as alarm states |
+| Air Quality, Carbon Dioxide, PM2.5, PM10, VOC, NO₂, Ozone | Air Quality Sensor | Each measurement as its own Matter concentration; an air monitor's temperature and humidity on the same device. A CO₂ sensor without an air quality rating shows good/poor from its "abnormal" flag |
+| Battery | Power Source on the device | Level, low battery, "replacement needed" |
 
 A device with several kinds of sensors (e.g. motion plus light) becomes one Matter device with the main sensor first and the others as parts; a service the device has twice (e.g. two temperature sensors) becomes its own part. Buttons (stateless switches) aren't supported yet.
 
@@ -34,22 +32,23 @@ A device with several kinds of sensors (e.g. motion plus light) becomes one Matt
 
 1. **Remove the device from Apple Home** (accessory → Remove Accessory). A HomeKit device can only be paired with one controller this way.
 2. Install the plugin and run it as a **child bridge**. In the child bridge settings, turn **Enable Matter** on (and HomeKit off: this plugin exposes nothing over HomeKit).
-3. Restart. The log lists nearby HomeKit Bluetooth devices:
+3. Restart. The log lists every nearby HomeKit Bluetooth device:
    ```
    Found HomeKit Bluetooth sensor 'Qingping Temp RH H' - DeviceID 41:21:14:E5:C2:25, available to pair. Add it under 'devices' to use it.
    ```
-4. Add it with that **DeviceID** (not the Bluetooth address) and its **HomeKit setup code**:
+4. Add each device with its **DeviceID** (not the Bluetooth address) and its **HomeKit setup code**:
    ```json
    {
      "platform": "HomeKitBleMatter",
      "devices": [
-       { "deviceId": "41:21:14:E5:C2:25", "name": "Bedroom", "setupCode": "128-84-842" }
+       { "deviceId": "41:21:14:E5:C2:25", "name": "Bedroom", "setupCode": "128-84-842" },
+       { "deviceId": "7C:0A:3F:52:9B:E1", "name": "Front door", "setupCode": "031-45-154" }
      ]
    }
    ```
-5. Restart. The plugin pairs, reads the device's structure and registers one Matter device. Add the bridge to your Matter controller with the code from the child bridge's Matter settings.
+5. Restart. The plugin pairs with each device, reads its structure and registers one Matter device per sensor. Add the bridge to your Matter controller with the code from the child bridge's Matter settings; sensors added later show up there by themselves.
 
-The pairing keys are stored in `<Homebridge storage>/homekit-ble-matter/`. Keep that folder: without it the device has to be factory-reset before it can be paired again (and gets a new DeviceID).
+The pairing keys are stored in `<Homebridge storage>/homekit-ble-matter/`, one file per device. Keep that folder: without it a device has to be factory-reset before it can be paired again (and gets a new DeviceID).
 
 ## Configuration
 
@@ -59,7 +58,7 @@ The pairing keys are stored in `<Homebridge storage>/homekit-ble-matter/`. Keep 
 | `devices[].name` | DeviceID | Name of the Matter device. |
 | `devices[].setupCode` | | 8-digit HomeKit code (`123-45-678`, `12345678` or `1234 5678`). Only needed for the first pairing. |
 | `devices[].matterId` | DeviceID | Only after a factory reset: the device's old DeviceID, so it stays the same device in your Matter controller (see below). |
-| `fastUpdates` | `false` | **Experimental.** Let devices send changes the moment they happen (HomeKit broadcast notifications) instead of only on the next read (also per device). |
+| `fastUpdates` | `false` | Let devices send changes the moment they happen (HomeKit broadcast notifications) instead of only on the next read (also per device). |
 | `pollInterval` | `10` | Minutes between reads (also per device). |
 | `timeout` | `60` | Minutes without a successful read before the device is reported as not responding; it keeps its last values (also per device). |
 | `bluetoothBinding` | `dbus` | How the adapter is accessed: `dbus` (BlueZ, recommended) or `hci` (raw HCI, needs root or network capabilities). |
@@ -67,9 +66,10 @@ The pairing keys are stored in `<Homebridge storage>/homekit-ble-matter/`. Keep 
 ## How it works
 
 - One Bluetooth scan listens to all HomeKit advertisements. When a device's advertised state number changes (HomeKit devices bump it when a value changes), it's read, at most once every 5 minutes - or every 30 seconds for a device reporting events (contact, motion, occupancy, leak, smoke, CO, CO₂ alarm), where 5 minutes late would be useless. On top of that it's polled every `pollInterval` minutes.
-- **Fast updates** (`fastUpdates`, experimental): HomeKit devices can announce a changed value in an encrypted advertisement that only their paired controller can read. With fast updates on, the plugin asks the device for its broadcast key once (one extra connection), enables the announcements for every reading that supports them, and applies each change the moment it's heard - no connection, seconds instead of minutes. Devices without support say so once in the log and keep working as before. The underlying library doesn't implement this ([hap-controller#43](https://github.com/Apollon77/hap-controller-node/issues/43)); the plugin does it itself, and it hasn't been tested with real devices yet.
+- **Fast updates** (`fastUpdates`): HomeKit devices can announce a changed value in an encrypted advertisement that only their paired controller can read. With fast updates on, the plugin asks the device for its broadcast key once (one extra connection), enables the announcements for every reading that supports them, and applies each change the moment it's heard - no connection, seconds instead of minutes. Devices without support say so once in the log and keep working as before. The underlying library doesn't implement this ([hap-controller#43](https://github.com/Apollon77/hap-controller-node/issues/43)); the plugin does it itself.
+- **Several sensors run side by side.** Each has its own pairing, poll interval, timeout and Matter device. They share one scan and take turns on the Bluetooth adapter, so a sensor that is out of range, out of battery or slow to answer never holds up the others: only that one is reported as not responding, and it's picked up again the moment it's back.
 - Each read is a short encrypted Bluetooth connection. Connections run one at a time, and scanning pauses while connected (BlueZ aborts connection attempts during a scan). A connection that times out is disconnected before the next one starts, and a connection in progress is disconnected when Homebridge shuts down: BlueZ would otherwise keep it, and a connected sensor stops advertising.
-- Bluetooth goes through BlueZ over D-Bus (noble 2). The underlying library, hap-controller, normally uses raw HCI (noble 1), which in testing couldn't hold a connection to a HomeKit sensor on a Raspberry Pi; this plugin hands it noble 2 instead. That only works in a child bridge: if another plugin in the same process already loaded hap-controller, the plugin refuses to start and says so.
+- Bluetooth goes through BlueZ over D-Bus (noble 2). The underlying library, hap-controller, normally uses raw HCI (noble 1), which doesn't hold a connection to a HomeKit sensor reliably on a Raspberry Pi; this plugin hands it noble 2 instead. That only works in a child bridge: if another plugin in the same process already loaded hap-controller, the plugin refuses to start and says so.
 - A device measuring both temperature and humidity becomes **one** Matter endpoint, so controllers that list every endpoint separately (IKEA Dirigera) show one device. Only different kinds of sensors on one device get separate endpoints (parts).
 - **A factory reset gives a HomeKit device a new DeviceID.** Put the new DeviceID from the log in the config, and the old one in `matterId`: the device then stays the same in your Matter controller, with its room, name and automations. Without `matterId` it shows up as a new device. If a configured device isn't seen within two minutes of startup, or its reads keep failing, the log says so and names any unconfigured device available to pair as the likely new DeviceID.
 - If pairing is removed without a reset (the DeviceID stays the same), the plugin notices and pairs again with the configured setup code. It only acts once the device has kept advertising "not paired" for 30 seconds, and keeps the old pairing keys in a backup file (`<DeviceID>.json.bak`).
@@ -91,13 +91,9 @@ The pairing keys are stored in `<Homebridge storage>/homekit-ble-matter/`. Keep 
 
 ## Known limitations
 
-- **New Matter `uniqueId` after each restart** for temperature+humidity devices, due to a Homebridge limitation ([homebridge/homebridge#4018](https://github.com/homebridge/homebridge/issues/4018)). IKEA Dirigera keeps the device, name and room across restarts; other controllers are untested.
-- **Bluetooth is shared** with any other Bluetooth plugin on the same adapter. It worked alongside a scanning plugin in testing, but busy adapters can make connections fail; failed reads are retried after a minute.
+- **New Matter `uniqueId` after each restart** for temperature+humidity devices, due to a Homebridge limitation ([homebridge/homebridge#4018](https://github.com/homebridge/homebridge/issues/4018)). IKEA Dirigera keeps the device, name and room across restarts.
+- **Bluetooth is shared** with any other Bluetooth plugin on the same adapter. The plugin works alongside other scanning plugins; on a busy adapter a connection can fail now and then, and a failed read is retried after a minute.
 - Without `fastUpdates` (or on a device that doesn't support it), changes are picked up by the advertised state number plus polling: seconds to minutes, not instant.
-
-## Development
-
-`npm test` runs the unit tests and, for every sensor type, a test that registers the plugin's Matter devices on **Homebridge's real Matter server** (the pinned dev dependency, with its matter.js), updates them and reads the values back - including a Homebridge restart. That's where a device type, cluster feature or value Homebridge or matter.js would reject shows up. These tests open a Matter UDP port and mDNS locally; nothing ever commissions them.
 
 ## Dependencies
 

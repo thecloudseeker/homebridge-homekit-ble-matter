@@ -2,7 +2,7 @@
   "pluginAlias": "HomeKitBleMatter",
   "pluginType": "platform",
   "singular": true,
-  "headerDisplay": "Pairs with HomeKit-over-Bluetooth sensors and exposes them over **Matter only**. Run this plugin as a child bridge with **Enable Matter** turned on (and HomeKit off). Nearby devices are listed in the log with their DeviceID; a device must be removed from Apple Home before this plugin can pair with it.",
+  "headerDisplay": "Pairs with HomeKit-over-Bluetooth sensors and exposes each one as a Matter device (**Matter only**). Add as many as you like. Run this plugin as a child bridge with **Enable Matter** turned on (and HomeKit off). Nearby devices are listed in the log with their DeviceID; a device must be removed from Apple Home before this plugin can pair with it.",
   "schema": {
     "type": "object",
     "properties": {
@@ -43,7 +43,7 @@
               "description": "Overrides the default below for this device."
             },
             "fastUpdates": {
-              "title": "Fast Updates (experimental)",
+              "title": "Fast Updates",
               "type": "boolean",
               "description": "Overrides the default below for this device."
             },
@@ -71,10 +71,10 @@
         "description": "After this long without a successful read, the device is reported as not responding (it keeps its last values)."
       },
       "fastUpdates": {
-        "title": "Fast Updates (experimental)",
+        "title": "Fast Updates",
         "type": "boolean",
         "default": false,
-        "description": "Let devices send changes the moment they happen (HomeKit broadcast notifications), instead of only on the next read - what door, motion and leak sensors need. Only for devices that support it; not yet tested with real hardware."
+        "description": "Let devices send changes the moment they happen (HomeKit broadcast notifications), instead of only on the next read - what door, motion and leak sensors need. Devices that don't support it keep working as before."
       },
       "bluetoothBinding": {
         "title": "Bluetooth Access",

@@ -23,6 +23,7 @@ function setup(
     lastSeenAt,
     pairableCandidates,
     onReachable,
+    configureBroadcasts,
   } = {},
 ) {
   t.mock.timers.enable({ apis: ["setTimeout", "setInterval", "Date"] });
@@ -47,6 +48,7 @@ function setup(
     ...(lastSeenAt ? { lastSeenAt } : {}),
     ...(pairableCandidates ? { pairableCandidates } : {}),
     ...(onReachable ? { onReachable } : {}),
+    ...(configureBroadcasts ? { configureBroadcasts } : {}),
   });
   t.after(() => sensor.stop());
   return { sensor, device, lines, ready, readings, store: sensor.store };
@@ -965,4 +967,39 @@ test("a door sensor's change is read within 30 seconds, not 5 minutes", async (t
   t.mock.timers.tick(20 * 1000);
   await flush();
   assert.deepEqual(readings.at(-1), { contact: false });
+});
+
+test("fast updates aren't set up while the sensor has gone quiet; the next read tries again", async (t) => {
+  const device = createFakeDevice();
+  const store = storeFromPreviousRun(device);
+  const state = store.load(DEVICE_ID);
+  for (const address of Object.values(state.database)) {
+    address.perms = ["pr", "ev-broadcast"];
+  }
+  store.save(DEVICE_ID, state);
+  let quiet = true;
+  let setUps = 0;
+  const reads = () => device.calls.filter((c) => c.startsWith("read")).length;
+  const { sensor, readings } = setup(t, {
+    device,
+    store,
+    config: { fastUpdates: true },
+    // Heard when a read starts; while quiet, not anymore once it's done.
+    lastSeenAt: () =>
+      quiet && reads() > 0 ? Date.now() - 60 * 1000 : Date.now(),
+    configureBroadcasts: async () => {
+      setUps += 1;
+      return { key: Buffer.alloc(32, 1), gsn: 1, enabled: [257, 145] };
+    },
+  });
+  sensor.handleAdvertisement(advertisement(device));
+  await flush(10);
+  assert.equal(readings.length, 1);
+  assert.equal(setUps, 0);
+
+  quiet = false;
+  t.mock.timers.tick(10 * 60 * 1000);
+  await flush(10);
+  assert.equal(readings.length, 2);
+  assert.equal(setUps, 1);
 });

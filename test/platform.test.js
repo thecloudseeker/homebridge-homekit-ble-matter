@@ -723,3 +723,219 @@ test("fast updates: a device without broadcast support says so once and keeps po
     1,
   );
 });
+
+// Three different sensors, as one home might have them.
+function threeSensors() {
+  const climate = createFakeDevice();
+  const door = createFakeDevice({
+    deviceId: "AA:AA:AA:AA:AA:01",
+    peripheralId: "aaaaaaaaaa01",
+    setupCode: "111-22-333",
+    database: hapDatabase([
+      ["sensor.contact", [["contact-state", 11, "uint8"]]],
+      ["battery", [["battery-level", 31, "uint8"]]],
+    ]),
+    values: { 4: "Acme", 5: "Door", 11: 0, 31: 90 },
+  });
+  const hallway = createFakeDevice({
+    deviceId: "AA:AA:AA:AA:AA:02",
+    peripheralId: "aaaaaaaaaa02",
+    setupCode: "444-55-666",
+    database: hapDatabase([
+      ["sensor.motion", [["motion-detected", 11, "bool"]]],
+      ["sensor.light", [["light-level.current", 21, "float"]]],
+    ]),
+    values: { 4: "Acme", 5: "Motion", 11: false, 21: 100 },
+  });
+  const config = {
+    devices: [
+      { deviceId: climate.deviceId, name: "Bedroom", setupCode: "12884842" },
+      { deviceId: door.deviceId, name: "Front door", setupCode: "11122333" },
+      { deviceId: hallway.deviceId, name: "Hallway", setupCode: "44455666" },
+    ],
+  };
+  return { climate, door, hallway, config };
+}
+
+// The latest state pushed to the Matter device called `name`.
+function lastState(api, name, cluster, partId, attribute) {
+  const accessory = [...api.matter.accessories.values()].find(
+    (candidate) => candidate.displayName === name,
+  );
+  return api.matter.stateUpdates
+    .filter(
+      (u) =>
+        u.uuid === accessory.UUID &&
+        u.cluster === cluster &&
+        u.partId === partId &&
+        (attribute == null || attribute in u.attributes),
+    )
+    .at(-1)?.attributes;
+}
+
+// Whether the Matter device called `name` was last reported as reachable;
+// undefined if nothing was ever reported.
+function reachable(api, name) {
+  return lastState(
+    api,
+    name,
+    "bridgedDeviceBasicInformation",
+    undefined,
+    "reachable",
+  )?.reachable;
+}
+
+test("several sensors: each is paired with its own code and becomes its own Matter device, one connection at a time", async (t) => {
+  const { climate, door, hallway, config } = threeSensors();
+  const { platform, api } = setup(t, {
+    device: [climate, door, hallway],
+    config,
+  });
+  api.emit("didFinishLaunching");
+  for (const device of [climate, door, hallway]) {
+    platform.discovery.emit("serviceUp", advertisement(device));
+  }
+  await flush(30);
+
+  assert.deepEqual(
+    [climate.paired, door.paired, hallway.paired],
+    [true, true, true],
+  );
+  assert.deepEqual(
+    [...api.matter.accessories.values()]
+      .map((a) => [a.displayName, a.deviceType.name])
+      .sort(),
+    [
+      ["Bedroom", "TemperatureSensor"],
+      ["Front door", "ContactSensor"],
+      ["Hallway", "OccupancySensor"],
+    ],
+  );
+  assert.equal(platform.hap.stats.maxOpen, 1);
+
+  // Each sensor's change reaches its own Matter device, and only that one.
+  climate.values[257] = 18.5;
+  door.values[11] = 1;
+  hallway.values[11] = true;
+  hallway.values[21] = 1000;
+  t.mock.timers.tick(10 * 60 * 1000);
+  await flush(30);
+  t.mock.timers.tick(3000);
+  await flush(30);
+
+  assert.deepEqual(lastState(api, "Bedroom", "temperatureMeasurement"), {
+    measuredValue: 1850,
+  });
+  assert.deepEqual(lastState(api, "Front door", "booleanState"), {
+    stateValue: false,
+  });
+  assert.equal(
+    lastState(api, "Hallway", "occupancySensing").occupancy.occupied,
+    true,
+  );
+  assert.deepEqual(
+    lastState(api, "Hallway", "illuminanceMeasurement", "light"),
+    { measuredValue: 30001 },
+  );
+  assert.equal(lastState(api, "Bedroom", "booleanState"), undefined);
+  assert.equal(
+    lastState(api, "Front door", "temperatureMeasurement"),
+    undefined,
+  );
+  assert.equal(platform.hap.stats.maxOpen, 1);
+});
+
+test("several sensors: one that stops answering is reported as not responding; the others keep updating", async (t) => {
+  const { climate, door, hallway, config } = threeSensors();
+  const { platform, api, lines } = setup(t, {
+    device: [climate, door, hallway],
+    config,
+  });
+  api.emit("didFinishLaunching");
+  for (const device of [climate, door, hallway]) {
+    platform.discovery.emit("serviceUp", advertisement(device));
+  }
+  await flush(30);
+  assert.equal(api.matter.accessories.size, 3);
+
+  door.failNextReads = Infinity;
+  for (let minute = 1; minute <= 65; minute += 1) {
+    climate.values[257] = 20 + minute / 10;
+    t.mock.timers.tick(60 * 1000);
+    await flush(10);
+  }
+
+  assert.equal(reachable(api, "Front door"), false);
+  assert.equal(reachable(api, "Bedroom"), undefined);
+  assert.equal(reachable(api, "Hallway"), undefined);
+  // The last poll before minute 65 read 26 °C.
+  assert.deepEqual(lastState(api, "Bedroom", "temperatureMeasurement"), {
+    measuredValue: 2600,
+  });
+  const unreachable = lines.warn.filter((l) => l.includes("unreachable"));
+  assert.equal(unreachable.length, 1);
+  assert.ok(unreachable[0].includes("[Front door]"));
+
+  // It answers again: back without a restart.
+  door.failNextReads = 0;
+  door.values[11] = 1;
+  t.mock.timers.tick(10 * 60 * 1000);
+  await flush(30);
+  t.mock.timers.tick(3000);
+  await flush(30);
+  assert.equal(reachable(api, "Front door"), true);
+  assert.deepEqual(lastState(api, "Front door", "booleanState"), {
+    stateValue: false,
+  });
+});
+
+test("several sensors: one out of range isn't connected to, the others are read, and it's read the moment it's heard again", async (t) => {
+  const { climate, door, hallway, config } = threeSensors();
+  const { platform, api } = setup(t, {
+    device: [climate, door, hallway],
+    config,
+    withNoble: true,
+  });
+  api.emit("didFinishLaunching");
+  const noble = platform.hap.noble;
+  const advertisements = [climate, door, hallway].map((device) =>
+    advertisement(device),
+  );
+  const hear = (...heard) => {
+    for (const adv of heard) {
+      noble.emit("discover", adv.peripheral);
+    }
+  };
+  t.mock.timers.tick(3000);
+  hear(...advertisements);
+  for (const adv of advertisements) {
+    platform.discovery.emit("serviceUp", adv);
+  }
+  await flush(30);
+  assert.equal(api.matter.accessories.size, 3);
+  const reads = (device) =>
+    device.calls.filter((c) => c.startsWith("read")).length;
+  const before = [climate, door, hallway].map(reads);
+
+  // The hallway sensor goes quiet; the other two are still heard.
+  const [climateAdv, doorAdv, hallwayAdv] = advertisements;
+  for (let step = 0; step < 61; step += 1) {
+    t.mock.timers.tick(10 * 1000);
+    hear(climateAdv, doorAdv);
+    await flush(5);
+  }
+  assert.equal(reads(climate), before[0] + 1);
+  assert.equal(reads(door), before[1] + 1);
+  assert.equal(reads(hallway), before[2]);
+
+  hallway.values[11] = true;
+  hear(hallwayAdv);
+  await flush(30);
+  t.mock.timers.tick(3000);
+  await flush(30);
+  assert.equal(reads(hallway), before[2] + 1);
+  assert.equal(
+    lastState(api, "Hallway", "occupancySensing").occupancy.occupied,
+    true,
+  );
+});
