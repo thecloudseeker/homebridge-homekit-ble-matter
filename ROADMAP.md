@@ -4,7 +4,7 @@
 is stable, and every known rough edge is either fixed or knowingly accepted and
 documented.
 
-**Where we are (0.1.1):** one Qingping CGG1H, paired and exposed to IKEA
+**Where we are (0.1.1, 0.2.0 in beta):** one Qingping CGG1H, paired and exposed to IKEA
 Dirigera over Matter, on a Raspberry Pi 5 (Homebridge 2.4.0), sharing the
 Bluetooth adapter with two other BLE plugins. Running since 2026-09-26.
 
@@ -30,7 +30,7 @@ Same code as 0.1.0-beta.11, released after two days of real use:
 - [x] Verified on real hardware: a sensor out of range for 10 minutes wasn't
   connected to, and was read the moment it was heard again (at -90 dBm)
 
-## 0.2.0 — more sensor types, several sensors (branch `feature/sensor-types`)
+## 0.2.0 — more sensor types, several sensors (0.2.0-beta.1)
 
 - [x] Contact, leak, motion, occupancy, light, smoke/CO, CO₂ and air quality
   (PM2.5, PM10, VOC, NO₂, ozone), each mapped to its Matter device type
