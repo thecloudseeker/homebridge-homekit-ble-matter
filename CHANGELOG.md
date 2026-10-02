@@ -1,4 +1,12 @@
 # Changelog
+## 0.1.1
+
+Same code as 0.1.1-beta.1, released after a test on real hardware: a sensor taken out of range was left alone until it was heard again, then read at once.
+
+* A sensor that hasn't been heard for more than 25 seconds is no longer connected to blind. The read waits for the sensor's next advertisement and happens right then, without waiting for the next poll. Before, every attempt failed at once with `interface not found in proxy object: org.freedesktop.DBus.Properties`, mostly with the sensor at the edge of range.
+* If that error still occurs, it's logged as "Bluetooth no longer knows the device (not heard for …)".
+* The "reporting it as unreachable" warning now says when the sensor hasn't been heard for a while (out of range, out of battery, or too weak a signal).
+
 ## 0.1.1-beta.1
 
 **Beta.**

@@ -4,7 +4,7 @@
 is stable, and every known rough edge is either fixed or knowingly accepted and
 documented.
 
-**Where we are (0.1.0, 0.1.1 in beta):** one Qingping CGG1H, paired and exposed to IKEA
+**Where we are (0.1.1):** one Qingping CGG1H, paired and exposed to IKEA
 Dirigera over Matter, on a Raspberry Pi 5 (Homebridge 2.4.0), sharing the
 Bluetooth adapter with two other BLE plugins. Running since 2026-09-26.
 
@@ -20,15 +20,15 @@ Same code as 0.1.0-beta.11, released after two days of real use:
 - [x] No D-Bus match-rule errors after 46 hours without a restart (they used to
   start after 12–17 hours)
 
-## 0.1.1 — weak-signal handling (0.1.1-beta.1)
+## 0.1.1 — weak-signal handling (released)
 
 - [x] **Don't connect to a sensor that hasn't been heard recently.** BlueZ drops
   a device it hasn't heard from for a while, and connecting then fails
   instantly with `interface not found in proxy object:
   org.freedesktop.DBus.Properties`. Wait for its next advertisement instead,
   and log "not heard for Xs" rather than the D-Bus error.
-- [ ] Verify on real hardware at the edge of range: fewer instant failures, and
-  reads right after the sensor is heard again
+- [x] Verified on real hardware: a sensor out of range for 10 minutes wasn't
+  connected to, and was read the moment it was heard again (at -90 dBm)
 
 ## 0.2.x — close the known gaps
 
