@@ -17,9 +17,10 @@ Read-only HomeKit Bluetooth sensors. Controllable devices (plugs, lights, locks,
 | Light | Light Sensor | Lux on Matter's logarithmic scale |
 | Smoke, Carbon Monoxide | Smoke/CO Alarm | Plus CO level; low battery and fault as alarm states |
 | Air Quality, Carbon Dioxide, PM2.5, PM10, VOC, NO₂, Ozone | Air Quality Sensor | Each measurement as its own Matter concentration; an air monitor's temperature and humidity on the same device. A CO₂ sensor without an air quality rating shows good/poor from its "abnormal" flag |
+| Buttons (stateless switches) | Generic Switch | Single, double and long press; one switch per button. Needs fast updates, which are on by themselves for a device with buttons |
 | Battery | Power Source on the device | Level, low battery, "replacement needed" |
 
-A device with several kinds of sensors (e.g. motion plus light) becomes one Matter device with the main sensor first and the others as parts; a service the device has twice (e.g. two temperature sensors) becomes its own part. Buttons (stateless switches) aren't supported yet.
+A device with several kinds of sensors (e.g. motion plus light) becomes one Matter device with the main sensor first and the others as parts; a service the device has twice (e.g. two temperature sensors) becomes its own part.
 
 ## Requirements
 
@@ -31,7 +32,7 @@ A device with several kinds of sensors (e.g. motion plus light) becomes one Matt
 ## Setup
 
 1. **Remove the device from Apple Home** (accessory → Remove Accessory). A HomeKit device can only be paired with one controller this way.
-2. Install the plugin and run it as a **child bridge**. In the child bridge settings, turn **Enable Matter** on (and HomeKit off: this plugin exposes nothing over HomeKit).
+2. Install the plugin (in the Homebridge plugin search, type **HomeKit BLE Matter** or the full name `@thecloudseeker/homebridge-homekit-ble-matter`) and run it as a **child bridge**. In the child bridge settings, turn **Enable Matter** on (and HomeKit off: this plugin exposes nothing over HomeKit).
 3. Restart. The log lists every nearby HomeKit Bluetooth device:
    ```
    Found HomeKit Bluetooth sensor 'Qingping Temp RH H' - DeviceID 41:21:14:E5:C2:25, available to pair. Add it under 'devices' to use it.
@@ -58,7 +59,7 @@ The pairing keys are stored in `<Homebridge storage>/homekit-ble-matter/`, one f
 | `devices[].name` | DeviceID | Name of the Matter device. |
 | `devices[].setupCode` | | 8-digit HomeKit code (`123-45-678`, `12345678` or `1234 5678`). Only needed for the first pairing. |
 | `devices[].matterId` | DeviceID | Only after a factory reset: the device's old DeviceID, so it stays the same device in your Matter controller (see below). |
-| `fastUpdates` | `false` | Let devices send changes the moment they happen (HomeKit broadcast notifications) instead of only on the next read (also per device). |
+| `fastUpdates` | `false` (on for buttons) | Let devices send changes the moment they happen (HomeKit broadcast notifications) instead of only on the next read (also per device). |
 | `pollInterval` | `10` | Minutes between reads (also per device). |
 | `timeout` | `60` | Minutes without a successful read before the device is reported as not responding; it keeps its last values (also per device). |
 | `devices[].temperatureOffset` | `0` | Added to the measured temperature in °C, e.g. `-0.5` for a sensor that reads half a degree too high. |
@@ -85,6 +86,8 @@ The pairing keys are stored in `<Homebridge storage>/homekit-ble-matter/`, one f
 - A failed read is retried after a minute; after five failures in a row, only every `pollInterval` minutes. A failed pairing is retried after 1, 2, 5, then every 10 minutes.
 - After `timeout` minutes without a successful read, the Matter device is reported as **not responding** and keeps its last values (rather than clearing them, which some controllers display as an out-of-range value). It responds again with the next successful read. The last values are also kept across restarts.
 - Battery level and low-battery warning are reported over Matter; a low battery also sets "replacement needed".
+- **Buttons** have no value to read: a press only exists the moment it happens. The plugin turns fast updates on for a device with buttons, and passes each press on as the press-and-release sequence Matter's switch turns into its short, long and double press events. A long press arrives when the button is let go.
+- **Status flags**: a sensor that reports it isn't working (HomeKit's "status active") is shown as not responding until it works again. Tampering has no place in Matter for these devices and is written to the log; a fault is passed on for smoke/CO alarms.
 - On the very first setup, the Matter device is created with the first successful read, so it never starts with unknown values (IKEA Dirigera shows an unknown temperature as 100 °C).
 
 ## Troubleshooting

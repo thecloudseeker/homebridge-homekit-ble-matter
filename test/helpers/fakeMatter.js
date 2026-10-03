@@ -113,6 +113,9 @@ function createFakeMatter({ registrationError } = {}) {
         "identify",
         "occupancySensing",
       ]),
+      GenericSwitch: fakeDeviceType("GenericSwitch", 15, ["identify"], {
+        mandatory: ["Switch"],
+      }),
       LightSensor: fakeDeviceType("LightSensor", 262, [
         "identify",
         "illuminanceMeasurement",

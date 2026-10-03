@@ -1,4 +1,11 @@
 # Changelog
+## 0.2.0-beta.2
+
+**Beta.**
+
+* **Buttons** (HomeKit stateless switches) become Matter switches, one per button, with single, double and long press. A press only exists the moment it happens, so fast updates are turned on by themselves for a device with buttons.
+* **Status flags**: a sensor that reports it isn't working is shown as not responding until it works again; tampering is written to the log.
+
 ## 0.2.0-beta.1
 
 **Beta.** More sensor types, several sensors side by side, and fast updates.

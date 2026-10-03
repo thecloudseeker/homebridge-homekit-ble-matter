@@ -30,7 +30,7 @@ Same code as 0.1.0-beta.11, released after two days of real use:
 - [x] Verified on real hardware: a sensor out of range for 10 minutes wasn't
   connected to, and was read the moment it was heard again (at -90 dBm)
 
-## 0.2.0 — more sensor types, several sensors (0.2.0-beta.1)
+## 0.2.0 — more sensor types, several sensors (0.2.0-beta.2)
 
 - [x] Contact, leak, motion, occupancy, light, smoke/CO, CO₂ and air quality
   (PM2.5, PM10, VOC, NO₂, ozone), each mapped to its Matter device type
@@ -39,9 +39,10 @@ Same code as 0.1.0-beta.11, released after two days of real use:
 - [x] Fast updates via HomeKit broadcast notifications (opt-in)
 - [x] Several sensors side by side: own pairing and Matter device each, one
   connection at a time, a failing sensor doesn't hold up the others
-- [ ] **Buttons** (stateless programmable switches → Matter Generic Switch).
-  Needs events: only with fast updates, if a button broadcasts its presses
-- [ ] Status flags (tampered, active) where Matter has a place for them
+- [x] **Buttons** (stateless programmable switches → Matter Generic Switch),
+  through fast updates: single, double and long press, one switch per button
+- [x] Status flags: "not active" as not responding, a fault on smoke/CO
+  alarms, tampering in the log (Matter has no place for it)
 
 ## 0.2.x — close the known gaps
 

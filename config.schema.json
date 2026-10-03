@@ -91,7 +91,7 @@
         "title": "Fast Updates",
         "type": "boolean",
         "default": false,
-        "description": "Let devices send changes the moment they happen (HomeKit broadcast notifications), instead of only on the next read - what door, motion and leak sensors need. Devices that don't support it keep working as before."
+        "description": "Let devices send changes the moment they happen (HomeKit broadcast notifications), instead of only on the next read - what door, motion and leak sensors need. Devices that don't support it keep working as before. Always on for a device with buttons unless turned off for it."
       },
       "bluetoothAdapter": {
         "title": "Bluetooth Adapter",

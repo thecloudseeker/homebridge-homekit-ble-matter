@@ -321,3 +321,35 @@ test("several sensors registered together stay separate devices with their own v
     [true, false, true],
   );
 });
+
+test("a two-button remote: a switch per button, presses accepted, battery on the device", async () => {
+  const { sensor, state } = await expose(
+    ["batteryLevel", "button", "button.2"],
+    { initial: { batteryLevel: 80 } },
+  );
+  assert.deepEqual(
+    sensor.accessory.parts.map((part) => part.id),
+    ["button2"],
+  );
+  assert.equal((await state("switch")).numberOfPositions, 2);
+  assert.equal((await state("switch")).multiPressMax, 2);
+  assert.equal((await state("powerSource")).batPercentRemaining, 160);
+
+  // Single on the first, double on the second: both end released.
+  await sensor.press("button", 0);
+  await sensor.press("button.2", 1);
+  assert.equal((await state("switch")).currentPosition, 0);
+  assert.equal((await state("switch", "button2")).currentPosition, 0);
+});
+
+test("a remote that also measures temperature: the button is the device, the temperature a part", async () => {
+  const { sensor, state } = await expose(["button", "temperature"], {
+    initial: { temperature: 21 },
+  });
+  assert.deepEqual(
+    sensor.accessory.parts.map((part) => part.id),
+    ["climate"],
+  );
+  await sensor.press("button", 0);
+  assert.equal((await state("switch")).currentPosition, 0);
+});

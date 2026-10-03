@@ -1025,3 +1025,147 @@ test("a sensor BlueZ still holds a connection to from a previous run is disconne
   await flush();
   assert.equal(asked.length, 1);
 });
+
+// A two-button remote with a battery, as HomeKit describes one. Its presses
+// can't be read, only broadcast.
+function remote() {
+  const button = (iid) => [
+    "stateless-programmable-switch",
+    [["input-event", iid, "uint8", ["ev", "ev-broadcast"]]],
+  ];
+  return createFakeDevice({
+    database: hapDatabase([
+      button(11),
+      button(21),
+      ["battery", [["battery-level", 31, "uint8", ["pr"]]]],
+    ]),
+    values: { 4: "Acme", 5: "Remote", 31: 80 },
+  });
+}
+
+async function startRemote(t, config = {}) {
+  const crypto = require("crypto");
+  const { encryptNotification } = require("../lib/broadcast");
+  const device = remote();
+  const key = crypto.randomBytes(32);
+  const context = setup(t, {
+    device,
+    withNoble: true,
+    config: {
+      devices: [
+        {
+          deviceId: "41:21:14:e5:c2:25",
+          name: "Remote",
+          setupCode: "12884842",
+          ...config,
+        },
+      ],
+    },
+    configureBroadcasts: async () => ({
+      key,
+      advertisingId: null,
+      gsn: 40,
+      configNumber: 1,
+      enabled: [11, 21],
+    }),
+  });
+  context.api.emit("didFinishLaunching");
+  const noble = context.platform.hap.noble;
+  const adv = advertisement(device, { GSN: 40 });
+  t.mock.timers.tick(3000);
+  noble.emit("discover", adv.peripheral);
+  context.platform.discovery.emit("serviceUp", adv);
+  await flush(10);
+  t.mock.timers.tick(3000);
+  await flush();
+  // The device broadcasts a press: `iid` is the button, `gesture` 0 single,
+  // 1 double, 2 long.
+  const press = async (gsn, iid, gesture) => {
+    const value = Buffer.alloc(8);
+    value.writeUInt8(gesture, 0);
+    adv.peripheral.advertisement = {
+      manufacturerData: encryptNotification(
+        key,
+        Buffer.from("412114E5C225", "hex"),
+        gsn,
+        iid,
+        value,
+      ),
+    };
+    noble.emit("discover", adv.peripheral);
+    await flush();
+  };
+  const switchUpdates = () =>
+    context.api.matter.stateUpdates
+      .filter((u) => u.cluster === "switch")
+      .map((u) => [u.partId ?? "main", u.attributes.currentPosition]);
+  return { ...context, device, press, switchUpdates };
+}
+
+test("buttons: a remote becomes a Matter switch per button, with fast updates on by itself, and its presses are never read", async (t) => {
+  const { api, device, lines } = await startRemote(t);
+
+  const [accessory] = api.matter.accessories.values();
+  assert.equal(accessory.deviceType.name, "GenericSwitch");
+  assert.deepEqual(accessory.clusters.switch, {
+    numberOfPositions: 2,
+    currentPosition: 0,
+    multiPressMax: 2,
+  });
+  assert.equal(accessory.clusters.powerSource.batPercentRemaining, 160);
+  assert.deepEqual(
+    accessory.parts.map((part) => [part.id, part.deviceType.name]),
+    [["button2", "GenericSwitch"]],
+  );
+  assert.ok(lines.info.some((l) => l.includes("Fast updates on")));
+  assert.deepEqual(
+    device.calls.filter((c) => c.startsWith("read:") && !c.includes("4,5")),
+    ["read:31"],
+  );
+});
+
+test("buttons: single, double and long presses reach the right button as press and release", async (t) => {
+  const { press, switchUpdates } = await startRemote(t);
+
+  await press(41, 11, 0);
+  assert.deepEqual(switchUpdates(), [
+    ["main", 1],
+    ["main", 0],
+  ]);
+
+  // A double press on the second button: two presses, close together.
+  await press(42, 21, 1);
+  t.mock.timers.tick(100);
+  await flush();
+  assert.deepEqual(switchUpdates().slice(2), [
+    ["button2", 1],
+    ["button2", 0],
+    ["button2", 1],
+    ["button2", 0],
+  ]);
+
+  // A long press: held past Matter's long-press time before the release.
+  await press(43, 11, 2);
+  assert.deepEqual(switchUpdates().slice(6), [["main", 1]]);
+  t.mock.timers.tick(2500);
+  await flush();
+  assert.deepEqual(switchUpdates().slice(6), [
+    ["main", 1],
+    ["main", 0],
+  ]);
+
+  // The same notification repeated: no second press.
+  await press(43, 11, 2);
+  t.mock.timers.tick(2500);
+  await flush();
+  assert.equal(switchUpdates().length, 8);
+});
+
+test("buttons: with fast updates turned off for it, the log says they need them", async (t) => {
+  const { lines, press, switchUpdates } = await startRemote(t, {
+    fastUpdates: false,
+  });
+  assert.ok(lines.info.some((l) => l.includes("need fast updates")));
+  await press(41, 11, 0);
+  assert.deepEqual(switchUpdates(), []);
+});

@@ -316,3 +316,32 @@ test("disconnectLeftovers disconnects them through BlueZ and reports a failure a
   // Without a D-Bus connection there is nothing to do.
   assert.deepEqual(await disconnectLeftovers({}, ["CB:81:D1:B0:00:A5"]), []);
 });
+
+test("parseAccessoryDatabase finds buttons (which can't be read) and the status flags", () => {
+  const { hapDatabase } = require("./helpers/fakeHap");
+  const { readings } = parseAccessoryDatabase(
+    hapDatabase([
+      [
+        "stateless-programmable-switch",
+        [["input-event", 11, "uint8", ["ev", "ev-broadcast"]]],
+      ],
+      [
+        "stateless-programmable-switch",
+        [["input-event", 21, "uint8", ["ev", "ev-broadcast"]]],
+      ],
+      [
+        "sensor.motion",
+        [
+          ["motion-detected", 31, "bool", ["pr", "ev"]],
+          ["status-active", 32, "bool", ["pr", "ev"]],
+          ["status-tampered", 33, "uint8", ["pr", "ev"]],
+        ],
+      ],
+    ]),
+    hap,
+  );
+  assert.deepEqual(
+    Object.fromEntries(Object.entries(readings).map(([k, v]) => [k, v.iid])),
+    { button: 11, "button.2": 21, motion: 31, active: 32, tampered: 33 },
+  );
+});

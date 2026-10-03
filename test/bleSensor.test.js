@@ -1112,3 +1112,48 @@ test("an offset that isn't a number is ignored", async (t) => {
   assert.equal(readings.at(-1).temperature, 22.4);
   assert.equal(readings.at(-1).humidity, 60.5);
 });
+
+test("a sensor that says it isn't working is reported as not responding until it works again; tampering is logged", async (t) => {
+  const device = createFakeDevice({
+    database: hapDatabase([
+      [
+        "sensor.motion",
+        [
+          ["motion-detected", 11, "bool"],
+          ["status-active", 12, "bool"],
+          ["status-tampered", 13, "uint8"],
+        ],
+      ],
+    ]),
+    values: { 4: "Acme", 5: "Motion", 11: false, 12: true, 13: 0 },
+  });
+  const states = [];
+  const { sensor, lines } = setup(t, {
+    device,
+    onReachable: (reachable) => states.push(reachable),
+  });
+  sensor.handleAdvertisement(advertisement(device));
+  await flush(10);
+  assert.deepEqual(states, []);
+
+  device.values[12] = false;
+  device.values[13] = 1;
+  t.mock.timers.tick(10 * 60 * 1000);
+  await flush(10);
+  assert.deepEqual(states, [false]);
+  assert.ok(lines.warn.some((l) => l.includes("isn't working")));
+  assert.equal(lines.warn.filter((l) => l.includes("tampered with")).length, 1);
+
+  // Unchanged on the next read: said once.
+  t.mock.timers.tick(10 * 60 * 1000);
+  await flush(10);
+  assert.deepEqual(states, [false]);
+  assert.equal(lines.warn.filter((l) => l.includes("tampered with")).length, 1);
+
+  device.values[12] = true;
+  device.values[13] = 0;
+  t.mock.timers.tick(10 * 60 * 1000);
+  await flush(10);
+  assert.deepEqual(states, [false, true]);
+  assert.ok(lines.info.some((l) => l.includes("working again")));
+});
