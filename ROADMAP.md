@@ -30,7 +30,7 @@ Same code as 0.1.0-beta.11, released after two days of real use:
 - [x] Verified on real hardware: a sensor out of range for 10 minutes wasn't
   connected to, and was read the moment it was heard again (at -90 dBm)
 
-## 0.2.0 — more sensor types, several sensors (0.2.0-beta.2)
+## 0.2.0 — more sensor types, several sensors (0.2.0-beta.3)
 
 - [x] Contact, leak, motion, occupancy, light, smoke/CO, CO₂ and air quality
   (PM2.5, PM10, VOC, NO₂, ozone), each mapped to its Matter device type
@@ -70,12 +70,14 @@ Same code as 0.1.0-beta.11, released after two days of real use:
   upstream. It only reports Bluetooth as unavailable before the adapter is
   up: dbus-next also emits `error` for a single unparsable message, and
   treating that as fatal made noble drop every known device.
-- [ ] **D-Bus match rule leak** (`fixMatchRuleRefcounts` in `lib/hap.js`):
-  dbus-next 0.10.2 checks its match-rule refcount with swapped
-  `hasOwnProperty` arguments, so it never sends `RemoveMatch`. Every device
-  the scan sees leaks a rule until the bus refuses more (2048 per connection)
-  after roughly half a day. Pinned; report upstream and drop the patch once
-  fixed.
+- [x] **D-Bus match rule leak**: gone with the move from dbus-next 0.10.2
+  (last released in 2022) to its maintained fork `@jellybrick/dbus-next`,
+  installed under the same name. The fork fixes the leak, so the plugin's
+  own patch was removed, and it drops the outdated packages the original
+  pulled in.
+- [ ] **Move to the fork's current line (0.11.x).** noble 2.8.0 asks for
+  dbus-next `^0.10.0`, so npm would install the original next to a newer
+  fork and noble would use the original. Needs noble to widen that range.
 - [ ] **Stale connection state reset** (`releaseStalePeripheral` in `lib/hap.js`):
   plus the patched `disconnect` in the D-Bus guard: noble 2.8.0's D-Bus
   binding never completes a disconnect for a device it holds no connection

@@ -70,14 +70,17 @@ test("normalizeDeviceId compares DeviceIDs case-insensitively", () => {
   assert.equal(normalizeDeviceId(undefined), "");
 });
 
-// A stand-in for dbus-next's MessageBus that records the calls it would send
-// to the bus daemon.
+// A stand-in for the D-Bus library's MessageBus that records the calls it
+// would send to the bus daemon.
 function createRecordingBus() {
+  const { MessageBus } = require("dbus-next");
   const sent = [];
   return {
     sent,
     _matchRules: {},
     _connection: { stream: { writable: true } },
+    _addMatch: MessageBus.prototype._addMatch,
+    _removeMatch: MessageBus.prototype._removeMatch,
     call(message) {
       sent.push(`${message.member} ${message.body[0]}`);
       return Promise.resolve();
@@ -88,22 +91,11 @@ function createRecordingBus() {
 const RULE =
   "type='signal',sender=org.bluez,interface='org.freedesktop.DBus.Properties',path='/org/bluez/hci0/dev_AA',member='PropertiesChanged'";
 
-test("dbus-next 0.10.2 never removes a match rule (the leak fixMatchRuleRefcounts works around)", async () => {
-  const MessageBus = require("dbus-next/lib/bus.js");
+// noble subscribes to every device the scan sees. A D-Bus library that
+// never unsubscribes (dbus-next 0.10.2 didn't) runs into the bus's limit of
+// 2048 match rules after about half a day, and Bluetooth stops working.
+test("the D-Bus library removes a match rule once its last listener is gone", async () => {
   const bus = createRecordingBus();
-  await MessageBus.prototype._addMatch.call(bus, RULE);
-  await MessageBus.prototype._removeMatch.call(bus, RULE);
-  assert.deepEqual(bus.sent, [`AddMatch ${RULE}`]);
-});
-
-test("fixMatchRuleRefcounts removes a rule once its last listener is gone", async () => {
-  const { fixMatchRuleRefcounts } = require("../lib/hap");
-  const MessageBus = require("dbus-next/lib/bus.js");
-  const bus = createRecordingBus();
-  bus._addMatch = MessageBus.prototype._addMatch;
-  bus._removeMatch = MessageBus.prototype._removeMatch;
-  fixMatchRuleRefcounts(bus);
-
   await bus._addMatch(RULE);
   await bus._addMatch(RULE);
   await bus._removeMatch(RULE);
@@ -115,37 +107,18 @@ test("fixMatchRuleRefcounts removes a rule once its last listener is gone", asyn
   assert.equal(bus.sent.length, 2);
 });
 
-test("fixMatchRuleRefcounts keeps rules bounded while devices come and go", async () => {
-  const { fixMatchRuleRefcounts } = require("../lib/hap");
-  const MessageBus = require("dbus-next/lib/bus.js");
+test("the D-Bus library keeps match rules bounded while devices come and go", async () => {
   const bus = createRecordingBus();
-  bus._addMatch = MessageBus.prototype._addMatch;
-  bus._removeMatch = MessageBus.prototype._removeMatch;
-  fixMatchRuleRefcounts(bus);
-
   for (let i = 0; i < 3000; i++) {
     const rule = RULE.replace("dev_AA", `dev_${i}`);
     await bus._addMatch(rule);
     await bus._removeMatch(rule);
   }
-  assert.equal(bus.homekitBleMatterMatchRules.size, 0);
-});
-
-test("fixMatchRuleRefcounts forgets a rule the bus refused, so it is retried", async () => {
-  const { fixMatchRuleRefcounts } = require("../lib/hap");
-  const MessageBus = require("dbus-next/lib/bus.js");
-  const bus = createRecordingBus();
-  bus._addMatch = MessageBus.prototype._addMatch;
-  bus._removeMatch = MessageBus.prototype._removeMatch;
-  const call = bus.call;
-  bus.call = () =>
-    Promise.reject(new Error("not allowed to add more match rules"));
-  fixMatchRuleRefcounts(bus);
-
-  await assert.rejects(bus._addMatch(RULE), /not allowed/);
-  bus.call = call;
-  await bus._addMatch(RULE);
-  assert.deepEqual(bus.sent, [`AddMatch ${RULE}`]);
+  assert.equal(Object.keys(bus._matchRules).length, 0);
+  assert.equal(
+    bus.sent.filter((c) => c.startsWith("RemoveMatch")).length,
+    3000,
+  );
 });
 
 test("rateLimitedWarning reports the first error, then at most one summary per interval", () => {

@@ -99,9 +99,10 @@ test("a D-Bus error once the adapter is up does not report Bluetooth as unsuppor
   }
 });
 
-test("the binding's D-Bus connection gets the working match-rule refcount", () => {
+test("noble's D-Bus binding runs on the maintained D-Bus library", () => {
   const { loadHap } = require("../lib/hap");
-  const bindings = loadHap({ binding: "dbus" }).noble._bindings;
+  const bindings = loadHap().noble._bindings;
   assert.ok(bindings._bus, "binding was started");
-  assert.ok(bindings._bus.homekitBleMatterMatchRules instanceof Map);
+  assert.equal(require("dbus-next/package.json").name, "@jellybrick/dbus-next");
+  assert.ok(bindings._bus instanceof require("dbus-next").MessageBus);
 });

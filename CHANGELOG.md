@@ -1,4 +1,12 @@
 # Changelog
+## 0.2.0-beta.3
+
+**Beta.**
+
+* **Maintained D-Bus library.** The plugin now uses `@jellybrick/dbus-next`, the maintained fork of dbus-next, which was last released in 2022. The fork fixes the subscription leak that used to stop Bluetooth after about half a day, so the plugin's own patch for it is gone.
+* **Node.js 22, 24 and 26** are supported, the versions Homebridge 2.4 runs on. Node.js 20 is no longer listed.
+* Fixed: after a failed read, a retry was still made a minute later even if the sensor had been read successfully in the meantime. On a weak connection that extra attempt could fail and start a new round of retries.
+
 ## 0.2.0-beta.2
 
 **Beta.**

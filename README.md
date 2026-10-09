@@ -26,7 +26,7 @@ A device with several kinds of sensors (e.g. motion plus light) becomes one Matt
 
 - Homebridge **2.4.0** or later, with Matter
 - A Bluetooth adapter the Homebridge host can use (the Raspberry Pi's built-in one works)
-- Node.js 20, 22 or 24
+- Node.js 22, 24 or 26
 - BlueZ (the standard Linux Bluetooth service) running, and the Homebridge user allowed to use it: on Raspberry Pi OS the default `pi` user is; otherwise add it to the `bluetooth` group (`sudo usermod -aG bluetooth <user>`, then restart Homebridge)
 
 ## Setup
@@ -106,9 +106,8 @@ The pairing keys are stored in `<Homebridge storage>/homekit-ble-matter/`, one f
 
 ## Dependencies
 
-Two dependencies look unused but are needed:
+One dependency looks unused but is needed:
 
-- **`dbus-next`**: noble 2 lists it as a peer dependency for its BlueZ (D-Bus) backend, so the plugin has to install it. It's pinned because the plugin patches a bug in it (see `fixMatchRuleRefcounts` in `lib/hap.js`).
-- **`node-gyp`**: never called by the plugin. Without a current copy, a dependency of the D-Bus library pulls in node-gyp 7, which fails to build on Node 24 and breaks the install.
+- **`dbus-next`**: noble 2 lists it as a peer dependency for its BlueZ (D-Bus) backend, so the plugin has to install it. The plugin installs the maintained fork `@jellybrick/dbus-next` under that name: the original was last released in 2022, never gave back the signal subscriptions it made (Bluetooth stopped after about half a day), and pulled in a long chain of outdated packages.
 
 Built on [hap-controller](https://github.com/Apollon77/hap-controller-node).

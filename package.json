@@ -1,7 +1,7 @@
 {
   "name": "@thecloudseeker/homebridge-homekit-ble-matter",
   "displayName": "HomeKit BLE Matter",
-  "version": "0.2.0-beta.2",
+  "version": "0.2.0-beta.3",
   "description": "Homebridge plugin that pairs with HomeKit-over-Bluetooth sensors (temperature, humidity, contact, leak, motion, light, smoke/CO, air quality, buttons) and exposes them over Matter (IKEA Dirigera, Google Home, Alexa, SmartThings…)",
   "main": "index.js",
   "scripts": {
@@ -47,13 +47,12 @@
   ],
   "engines": {
     "homebridge": "^2.4.0",
-    "node": "^20.18.0 || ^22.10.0 || ^24.0.0"
+    "node": "^22.10.0 || ^24.0.0 || ^26.0.0"
   },
   "dependencies": {
     "@stoprocent/noble": "2.8.0",
-    "dbus-next": "0.10.2",
-    "hap-controller": "0.10.2",
-    "node-gyp": "12.4.0"
+    "dbus-next": "npm:@jellybrick/dbus-next@0.10.3",
+    "hap-controller": "0.10.2"
   },
   "devDependencies": {
     "eslint": "^10.9.1",

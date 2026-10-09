@@ -646,6 +646,27 @@ test("after five failed reads it stops retrying every minute and only tries on t
   assert.equal(readings.length, 1);
 });
 
+test("a read that succeeds before the retry is due cancels the retry", async (t) => {
+  const device = createFakeDevice();
+  const { sensor } = setup(t, {
+    device,
+    store: storeFromPreviousRun(device),
+  });
+  device.failNextReads = 1;
+  sensor.handleAdvertisement(advertisement(device)); // read → fails
+  await flush();
+  sensor.requestRead("poll"); // succeeds within the retry window
+  await flush();
+  const reads = () => device.calls.filter((c) => c.startsWith("read:")).length;
+  assert.equal(reads(), 2);
+
+  t.mock.timers.tick(59 * 1000);
+  sensor.handleAdvertisement(advertisement(device));
+  t.mock.timers.tick(1000);
+  await flush();
+  assert.equal(reads(), 2);
+});
+
 test("the repeated-failure hint names a device available to pair as the likely new DeviceID", async (t) => {
   const device = createFakeDevice();
   const { sensor, lines } = setup(t, {
