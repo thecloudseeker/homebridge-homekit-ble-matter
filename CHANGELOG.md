@@ -1,4 +1,20 @@
 # Changelog
+## 0.2.0
+
+Stable release of the 0.2.0 betas. Coming from 0.1.1 (the previous `latest`), the main changes are:
+
+* **More sensor types**: contact, leak, motion, occupancy, light, smoke, carbon monoxide, carbon dioxide and air quality (PM2.5, PM10, VOC, NO₂, ozone), each as the matching Matter device. A device with several kinds of sensors becomes one Matter device with parts.
+* **Buttons** become Matter switches with single, double and long press.
+* **Several sensors side by side**, each with its own pairing and Matter device; one that stops answering doesn't hold up the others.
+* **Fast updates** (`fastUpdates`): changes arrive the moment they happen through HomeKit's encrypted broadcasts, without a connection.
+* New per-device options: `removePairing` (give a device back to Apple Home without a factory reset), `temperatureOffset` and `humidityOffset`.
+* New `bluetoothAdapter` to give the plugin its own adapter. **`bluetoothBinding` is removed**: Bluetooth always goes through BlueZ, and a leftover `"hci"` setting is ignored with a hint in the log.
+* Sensors BlueZ still holds a connection to from a previous run are disconnected at startup.
+* The maintained D-Bus library `@jellybrick/dbus-next` replaces dbus-next, which hasn't been released since 2022. Node.js 22, 24 and 26 are supported.
+* Fixed: a retry or a read planned for a change no longer runs when another read has already fetched the values in the meantime. On a weak connection, that spare attempt could fail and start a new round of retries.
+
+See the beta entries below for the details.
+
 ## 0.2.0-beta.3
 
 **Beta.**

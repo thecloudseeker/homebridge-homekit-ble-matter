@@ -208,6 +208,28 @@ test("a change in the advertisement's state number triggers a read, at most once
   );
 });
 
+test("a read that succeeds before the deferred read is due replaces it", async (t) => {
+  const device = createFakeDevice();
+  const { sensor, readings } = setup(t, {
+    device,
+    store: storeFromPreviousRun(device),
+  });
+  sensor.handleAdvertisement(advertisement(device, { GSN: 1 }));
+  await flush();
+  t.mock.timers.tick(60 * 1000);
+  sensor.handleAdvertisement(advertisement(device, { GSN: 2 })); // deferred
+  await flush();
+  sensor.requestRead("poll"); // already fetches what changed
+  await flush();
+  assert.equal(readings.length, 2);
+
+  t.mock.timers.tick(4 * 60 * 1000 - 1000);
+  sensor.handleAdvertisement(advertisement(device, { GSN: 2 }));
+  t.mock.timers.tick(1000);
+  await flush();
+  assert.equal(readings.length, 2);
+});
+
 test("an unchanged advertisement does not trigger a read", async (t) => {
   const device = createFakeDevice();
   const { sensor, readings } = setup(t, {
