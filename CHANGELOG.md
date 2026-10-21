@@ -1,4 +1,10 @@
 # Changelog
+## 0.2.1
+
+* **Fewer connections:** a poll is skipped when a read in the last 5 minutes (at most half the poll interval) already fetched the values, e.g. a retry that succeeded just before it. Saves battery, and on a weak connection a spare attempt that could fail.
+* **Quieter log:** a single failed read that succeeds on the retry a minute later is only in the debug log. The warning comes once the retry fails too, and `Readings OK again` only follows such a warning.
+* The debug log says how long a change-triggered read waits (`Change signalled; reading in 40s.`), and shows `RSSI unknown` instead of `RSSI 0 dBm` before BlueZ has measured the signal.
+
 ## 0.2.0
 
 Stable release of the 0.2.0 betas. Coming from 0.1.1 (the previous `latest`), the main changes are:

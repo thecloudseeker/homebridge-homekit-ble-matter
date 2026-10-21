@@ -219,7 +219,7 @@ test("a read that succeeds before the deferred read is due replaces it", async (
   t.mock.timers.tick(60 * 1000);
   sensor.handleAdvertisement(advertisement(device, { GSN: 2 })); // deferred
   await flush();
-  sensor.requestRead("poll"); // already fetches what changed
+  sensor.requestRead("retry"); // already fetches what changed
   await flush();
   assert.equal(readings.length, 2);
 
@@ -317,7 +317,7 @@ test("a failed connect that leaves noble's peripheral stuck doesn't block every 
   sensor.handleAdvertisement(advertisement(device));
   await flush();
   assert.equal(readings.length, 0);
-  assert.match(lines.warn.join("\n"), /le-connection-abort-by-local/);
+  assert.match(lines.debug.join("\n"), /le-connection-abort-by-local/);
 
   t.mock.timers.tick(60 * 1000);
   await flush();
@@ -500,12 +500,82 @@ test("a failed read with a plain-string rejection is reported readably", async (
     device,
     store: storeFromPreviousRun(device),
   });
-  device.failNextReads = 1;
+  device.failNextReads = 2;
 
   sensor.handleAdvertisement(advertisement(device));
   await flush();
+  t.mock.timers.tick(60 * 1000);
+  await flush();
 
-  assert.ok(lines.warn.some((l) => l.endsWith("Reading failed: Timeout")));
+  assert.ok(
+    lines.warn.some((l) => l.endsWith("Reading failed (2 in a row): Timeout")),
+  );
+});
+
+test("a single failed read that recovers on the retry isn't warned about", async (t) => {
+  const device = createFakeDevice();
+  const { sensor, readings, lines } = setup(t, {
+    device,
+    store: storeFromPreviousRun(device),
+  });
+  sensor.handleAdvertisement(advertisement(device));
+  await flush();
+  device.failNextReads = 1;
+  t.mock.timers.tick(10 * 60 * 1000); // poll → fails
+  await flush();
+  t.mock.timers.tick(60 * 1000); // retry → succeeds
+  await flush();
+
+  assert.equal(readings.length, 2);
+  assert.equal(lines.warn.length, 0);
+  assert.ok(!lines.info.some((l) => l.includes("Readings OK again")));
+  assert.ok(lines.debug.some((l) => l.includes("Reading failed (1 in a row")));
+});
+
+test("a poll right after a successful retry is skipped", async (t) => {
+  const device = createFakeDevice();
+  const { sensor, lines } = setup(t, {
+    device,
+    store: storeFromPreviousRun(device),
+  });
+  const reads = () => device.calls.filter((c) => c.startsWith("read:")).length;
+  sensor.handleAdvertisement(advertisement(device)); // startup read
+  await flush();
+  t.mock.timers.tick(6 * 60 * 1000);
+  device.failNextReads = 1;
+  sensor.requestRead("changed"); // fails
+  await flush();
+  t.mock.timers.tick(60 * 1000); // retry → succeeds, 3 min before the poll
+  await flush();
+  assert.equal(reads(), 3);
+
+  t.mock.timers.tick(3 * 60 * 1000); // poll
+  await flush();
+  assert.equal(reads(), 3);
+  assert.ok(lines.debug.some((l) => l.includes("skipping this poll")));
+
+  sensor.handleAdvertisement(advertisement(device));
+  t.mock.timers.tick(10 * 60 * 1000); // the next poll reads again
+  await flush();
+  assert.equal(reads(), 4);
+});
+
+test("a short poll interval isn't skipped for five minutes", async (t) => {
+  const device = createFakeDevice();
+  const { sensor } = setup(t, {
+    device,
+    store: storeFromPreviousRun(device),
+    config: { pollInterval: 1 },
+  });
+  const reads = () => device.calls.filter((c) => c.startsWith("read:")).length;
+  sensor.handleAdvertisement(advertisement(device));
+  await flush();
+  for (let i = 0; i < 3; i += 1) {
+    sensor.handleAdvertisement(advertisement(device));
+    t.mock.timers.tick(60 * 1000);
+    await flush();
+  }
+  assert.equal(reads(), 4);
 });
 
 test("repeated setup failures back off (1, 2, 5, 10 min) and suggest restarting the sensor after three", async (t) => {
@@ -725,6 +795,21 @@ test("debug logging shows the signal strength for each connection and read", asy
     ),
   );
   assert.ok(lines.debug.some((l) => /Read \(startup, RSSI -78 dBm/.test(l)));
+});
+
+test("an RSSI of 0, before BlueZ has measured one, is logged as unknown", async (t) => {
+  const device = createFakeDevice();
+  const { sensor, lines } = setup(t, {
+    device,
+    store: storeFromPreviousRun(device),
+  });
+  const ad = advertisement(device);
+  ad.peripheral.rssi = 0;
+  sensor.handleAdvertisement(ad);
+  await flush();
+
+  assert.ok(lines.debug.some((l) => l.includes("Connecting (RSSI unknown")));
+  assert.ok(!lines.debug.some((l) => l.includes("0 dBm")));
 });
 
 test("on the very first setup the Matter device is only registered once a read succeeded, so it never starts with unknown values", async (t) => {
@@ -978,11 +1063,14 @@ test("BlueZ's 'interface not found' error is explained", async (t) => {
     device,
     store: storeFromPreviousRun(device),
   });
-  device.failNextReads = 1;
+  device.failNextReads = 2;
   device.readError = new Error(
     "interface not found in proxy object: org.freedesktop.DBus.Properties",
   );
   sensor.handleAdvertisement(advertisement(device));
+  await flush(10);
+  sensor.handleAdvertisement(advertisement(device));
+  t.mock.timers.tick(60 * 1000);
   await flush(10);
   assert.ok(
     lines.warn.some((l) => l.includes("Bluetooth no longer knows the device")),

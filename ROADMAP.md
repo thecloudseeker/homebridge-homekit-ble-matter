@@ -4,7 +4,7 @@
 is stable, and every known rough edge is either fixed or knowingly accepted and
 documented.
 
-**Where we are (0.2.0):** one Qingping CGG1H, paired and exposed to IKEA
+**Where we are (0.2.1):** one Qingping CGG1H, paired and exposed to IKEA
 Dirigera over Matter, on a Raspberry Pi 5 (Homebridge 2.4.0), sharing the
 Bluetooth adapter with two other BLE plugins. Running since 2026-09-26.
 
@@ -58,6 +58,12 @@ Same code as 0.1.0-beta.11, released after two days of real use:
   a crash: a connected sensor stops advertising.
 - [x] **Raw HCI removed** (`bluetoothBinding`): it didn't hold connections;
   Bluetooth always goes through BlueZ.
+
+## 0.2.1 — a calmer log (released)
+
+- [x] A poll right after a successful read is skipped
+- [x] A single failed read that recovers on the retry is no longer a warning
+- [x] Clearer debug lines: wait before a change-triggered read, unknown RSSI
 
 ## 0.3.x — settle the workarounds (optional)
 
