@@ -1,4 +1,8 @@
 # Changelog
+## 0.2.2
+
+* The author link on npm points to [eikedreier.com](https://eikedreier.com/).
+
 ## 0.2.1
 
 * **Fewer connections:** a poll is skipped when a read in the last 5 minutes (at most half the poll interval) already fetched the values, e.g. a retry that succeeded just before it. Saves battery, and on a weak connection a spare attempt that could fail.
