@@ -379,3 +379,68 @@ test("ordering the proxy object setup is applied once", () => {
   orderProxyObjectInit(MessageBus);
   assert.equal(MessageBus.prototype.getProxyObject, once);
 });
+
+test("parseAccessoryDatabase keys controllable characteristics by service, numbered per service", () => {
+  const { hapDatabase } = require("./helpers/fakeHap");
+  const { readings } = parseAccessoryDatabase(
+    hapDatabase([
+      [
+        "outlet",
+        [
+          ["on", 11, "bool"],
+          ["outlet-in-use", 12, "bool"],
+        ],
+      ],
+      ["lightbulb", [["on", 21, "bool"]]],
+      [
+        "lightbulb",
+        [
+          ["on", 31, "bool"],
+          ["brightness", 32, "int"],
+        ],
+      ],
+      [
+        "thermostat",
+        [
+          ["temperature.current", 41, "float"],
+          ["temperature.target", 42, "float"],
+          ["heating-cooling.target", 43, "uint8"],
+        ],
+      ],
+      [
+        "window-covering",
+        [
+          ["position.current", 51, "uint8"],
+          ["position.target", 52, "uint8"],
+          ["position.hold", 53, "bool", ["pw"]],
+        ],
+      ],
+      [
+        "fanv2",
+        [
+          ["active", 61, "uint8"],
+          ["rotation.speed", 62, "float"],
+        ],
+      ],
+    ]),
+    hap,
+  );
+  const iid = (key) => readings[key]?.iid;
+
+  assert.equal(iid("outletOn"), 11);
+  assert.equal(iid("outletInUse"), 12);
+  // The second light's on and brightness belong together.
+  assert.equal(iid("lightOn"), 21);
+  assert.equal(iid("lightOn.2"), 31);
+  assert.equal(iid("brightness.2"), 32);
+  assert.equal(readings.brightness, undefined);
+  // A thermostat's temperature is the thermostat's, not a temperature sensor.
+  assert.equal(iid("thermostatTemperature"), 41);
+  assert.equal(readings.temperature, undefined);
+  assert.equal(iid("thermostatTarget"), 42);
+  assert.equal(iid("thermostatTargetMode"), 43);
+  // Write-only, but it can be set.
+  assert.equal(iid("coverHold"), 53);
+  assert.equal(iid("fanActive"), 61);
+  assert.equal(iid("fanSpeed"), 62);
+});

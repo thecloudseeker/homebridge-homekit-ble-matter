@@ -93,6 +93,34 @@ function createFakeMatter({ registrationError } = {}) {
     },
     deviceTypes: {
       BridgedNode: fakeDeviceType("BridgedNode", 19, []),
+      // Controllable devices (see lib/controlMapping.js).
+      OnOffOutlet: fakeDeviceType("OnOffPlugInUnit", 266, ["onOff"]),
+      OnOffLight: fakeDeviceType("OnOffLight", 256, ["onOff"]),
+      DimmableLight: fakeDeviceType("DimmableLight", 257, [
+        "onOff",
+        "levelControl",
+      ]),
+      ColorTemperatureLight: fakeDeviceType("ColorTemperatureLight", 268, [
+        "onOff",
+        "levelControl",
+        "colorControl",
+      ]),
+      ExtendedColorLight: fakeDeviceType("ExtendedColorLight", 269, [
+        "onOff",
+        "levelControl",
+        "colorControl",
+      ]),
+      DoorLock: fakeDeviceType("DoorLock", 10, ["doorLock"]),
+      WindowCovering: fakeDeviceType("WindowCovering", 514, ["identify"]),
+      Fan: fakeDeviceType("Fan", 43, ["fanControl"]),
+      Thermostat: fakeDeviceType("Thermostat", 769, ["identify"]),
+      RoomAirConditioner: fakeDeviceType("RoomAirConditioner", 114, [
+        "onOff",
+        "thermostat",
+      ]),
+      WaterValve: fakeDeviceType("WaterValve", 66, [
+        "valveConfigurationAndControl",
+      ]),
       TemperatureSensor: fakeDeviceType("TemperatureSensor", 770, [
         "identify",
         "temperatureMeasurement",

@@ -1196,3 +1196,40 @@ test("buttons: with fast updates turned off for it, the log says they need them"
   await press(41, 11, 0);
   assert.deepEqual(switchUpdates(), []);
 });
+
+test("end to end: a plug is registered with handlers, and a Matter command switches it", async (t) => {
+  const device = createFakeDevice({
+    database: hapDatabase([
+      [
+        "outlet",
+        [
+          ["on", 11, "bool", ["pr", "pw", "ev"]],
+          ["outlet-in-use", 12, "bool", ["pr", "ev"]],
+        ],
+      ],
+    ]),
+    values: { 4: "Acme", 5: "Plug", 11: false, 12: false },
+  });
+  const { platform, api, lines } = setup(t, { device });
+  api.emit("didFinishLaunching");
+  platform.discovery.emit("serviceUp", advertisement(device));
+  await flush(10);
+  t.mock.timers.tick(3000);
+  await flush(10);
+
+  assert.equal(api.matter.accessories.size, 1);
+  const [accessory] = api.matter.accessories.values();
+  assert.equal(accessory.deviceType.name, "OnOffPlugInUnit");
+  assert.equal(accessory.clusters.onOff.onOff, false);
+  assert.ok(lines.info.some((l) => l.includes("staying connected")));
+
+  await accessory.handlers.onOff.on();
+  await flush(10);
+  assert.equal(device.values[11], 1);
+  assert.ok(device.calls.includes("write:11=1"));
+  assert.deepEqual(
+    api.matter.stateUpdates.filter((u) => u.cluster === "onOff").at(-1)
+      ?.attributes,
+    { onOff: true },
+  );
+});

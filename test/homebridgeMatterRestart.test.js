@@ -125,3 +125,67 @@ test("a temperature and humidity sensor keeps its Matter identity across a Homeb
     await second?.stop();
   }
 });
+
+for (const [kind, capabilities, readings, cluster, attribute, value] of [
+  [
+    "colour light",
+    ["brightness", "colorTemperature", "hue", "lightOn", "saturation"],
+    { lightOn: true, brightness: 50, hue: 120, saturation: 100 },
+    "colorControl",
+    "currentHue",
+    85,
+  ],
+  [
+    "blind",
+    ["coverCurrent", "coverHold", "coverState", "coverTarget"],
+    { coverCurrent: 40, coverTarget: 40, coverState: 2 },
+    "windowCovering",
+    "currentPositionLiftPercent100ths",
+    6000,
+  ],
+  [
+    "thermostat",
+    ["thermostatTarget", "thermostatTargetMode", "thermostatTemperature"],
+    {
+      thermostatTemperature: 20,
+      thermostatTargetMode: 1,
+      thermostatTarget: 22,
+    },
+    "thermostat",
+    "occupiedHeatingSetpoint",
+    2200,
+  ],
+]) {
+  test(`a ${kind} survives a Homebridge restart, with its handlers and last values`, async () => {
+    const first = await startRealMatter();
+    let second;
+    try {
+      const device = build(first.matter, capabilities, readings);
+      await first.matter.registerPlatformAccessories(
+        PLUGIN,
+        PLATFORM,
+        device.toAccessories(),
+      );
+      device.markRegistered();
+      await first.stop({ keep: true });
+
+      second = await startRealMatter({ base: first.base });
+      const again = build(second.matter, capabilities, readings);
+      await second.matter.registerPlatformAccessories(
+        PLUGIN,
+        PLATFORM,
+        again.toAccessories(),
+      );
+      again.markRegistered();
+      assert.equal(
+        (await second.matter.getAccessoryState(again.accessory.UUID, cluster))[
+          attribute
+        ],
+        value,
+      );
+      assert.ok(again.controllable);
+    } finally {
+      await second?.stop();
+    }
+  });
+}

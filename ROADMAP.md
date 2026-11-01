@@ -4,10 +4,11 @@
 is stable, and every known rough edge is either fixed or knowingly accepted and
 documented.
 
-**Where we are (0.2.4):** one Qingping CGG1H, paired and exposed over Matter
+**Where we are (0.3.0):** one Qingping CGG1H, paired and exposed over Matter
 to IKEA Dirigera and Apple Home, on a Raspberry Pi 5, sharing the Bluetooth
 adapter with two other BLE plugins. Running since 2026-09-26. Only the weeks of
-unattended running are left for 1.0.
+unattended running are left for 1.0, plus running 0.3.0's controllable
+devices on real hardware.
 
 ## 0.1.0 — first stable release (released)
 
@@ -66,6 +67,18 @@ Same code as 0.1.0-beta.11, released after two days of real use:
 - [x] A single failed read that recovers on the retry is no longer a warning
 - [x] Clearer debug lines: wait before a change-triggered read, unknown RSSI
 
+## 0.3.0 — controllable devices (released)
+
+- [x] Plugs, switches, lights, locks, blinds/windows/doors, fans and air
+  purifiers, thermostats, air conditioners, valves and faucets, mapped to
+  their Matter device types and checked against matter.js through
+  Homebridge's real Matter server
+- [x] Kept connection per controllable device (`keepConnected`): commands
+  within about a second, the device's own changes at once, reconnect with
+  backoff; our own GATT reads and writes by instance ID, with the device's
+  status checked and timed writes where required
+- [ ] Run on real controllable hardware (a Bluetooth-only plug or light)
+
 ## 0.3.x — settle the workarounds (optional)
 
 - [ ] **noble 2 injection into hap-controller** (`lib/hap.js`): works because
@@ -118,7 +131,9 @@ Same code as 0.1.0-beta.11, released after two days of real use:
 - [x] Tested with **two Matter controllers**: IKEA Dirigera and Apple Home
 - [x] Pairing removal and adapter selection shipped; no configuration changes planned
 - [x] README covers supported devices, setup, troubleshooting and known limitations
-- [x] Scope stated: **read-only HomeKit Bluetooth sensors**.
+- [x] Scope stated: HomeKit Bluetooth sensors and controllable devices;
+  garage doors, security systems, humidifiers and TVs are not supported
+- [ ] Controllable devices run on real hardware
 
 Optional around 1.0: apply for **Homebridge Verified** (config schema, no
 postinstall scripts, proper error handling — mostly in place already).

@@ -65,6 +65,12 @@
               "placeholder": "Leave empty",
               "description": "Only needed after a factory reset: a reset gives the device a new DeviceID. Put the new one above and the old DeviceID here, and the device stays the same in your Matter controller (room, name, automations)."
             },
+            "keepConnected": {
+              "title": "Stay connected",
+              "type": "boolean",
+              "default": true,
+              "description": "For a device that can be controlled (a plug, a light, a lock, ...): stay connected, so a command takes effect within about a second and changes made at the device show up at once. Turn it off for a battery-powered device: each command then connects first, which takes several seconds, but spares the battery."
+            },
             "removePairing": {
               "title": "Remove pairing",
               "type": "boolean",
@@ -115,6 +121,7 @@
         "devices[].temperatureOffset",
         "devices[].humidityOffset",
         "devices[].matterId",
+        "devices[].keepConnected",
         "devices[].removePairing"
       ]
     },

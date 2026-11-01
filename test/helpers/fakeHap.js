@@ -330,9 +330,98 @@ function createFakeHap(deviceOrDevices, { withNoble = false } = {}) {
     }
   }
 
+  // A kept connection (see lib/hapLink.js), on the same device values as the
+  // reads. `device.links`: those opened; `link.drop()` loses the connection,
+  // `link.announce(key, value)` is a change made at the device.
+  class FakeLink extends EventEmitter {
+    constructor(device, addresses, subscribed) {
+      super();
+      this.device = device;
+      this.addresses = addresses;
+      this.subscribed = subscribed;
+      this.isOpen = true;
+    }
+    async read(addresses) {
+      const device = this.device;
+      device.calls.push(
+        `link-read:${Object.values(addresses)
+          .map((a) => a.iid)
+          .join(",")}`,
+      );
+      if (!this.isOpen) {
+        throw new Error("Not connected");
+      }
+      if (device.failNextReads > 0) {
+        device.failNextReads -= 1;
+        throw device.readError ?? "Timeout";
+      }
+      return Object.fromEntries(
+        Object.entries(addresses).map(([key, address]) => [
+          key,
+          device.values[address.iid],
+        ]),
+      );
+    }
+    async write(writes) {
+      const device = this.device;
+      if (!this.isOpen) {
+        throw new Error("Not connected");
+      }
+      if (device.holdWrites != null) {
+        await device.holdWrites;
+      }
+      for (const { address, value } of writes) {
+        device.calls.push(`write:${address.iid}=${value}`);
+        if (device.refuseNextWrite) {
+          device.refuseNextWrite = false;
+          throw new Error("The device refused: Invalid request");
+        }
+        device.values[address.iid] = value;
+      }
+    }
+    announce(key, value) {
+      this.device.values[this.addresses[key].iid] = value;
+      this.emit("change", { [key]: value });
+    }
+    drop() {
+      this.isOpen = false;
+      this.emit("close");
+    }
+    async close() {
+      this.device.calls.push("link:close");
+      this.isOpen = false;
+    }
+  }
+
+  async function openLink(
+    peripheral,
+    deviceId,
+    pairingData,
+    addresses,
+    { subscribe = true } = {},
+  ) {
+    const device =
+      devices.find(
+        (candidate) =>
+          candidate.deviceId.toLowerCase() === String(deviceId).toLowerCase(),
+      ) ?? devices[0];
+    device.calls.push(subscribe ? "link:open" : "link:open-once");
+    if (device.failNextLinks > 0) {
+      device.failNextLinks -= 1;
+      throw "le-connection-abort-by-local";
+    }
+    if (!device.paired || pairingData?.iOSDevicePairingID !== "ctrl") {
+      throw new Error("M2: authentication error");
+    }
+    const link = new FakeLink(device, addresses, subscribe);
+    device.links = [...(device.links ?? []), link];
+    return link;
+  }
+
   return {
     BLEDiscovery,
     GattClient,
+    openLink,
     // Short fake UUIDs, or real HAP UUIDs through hap-controller's own
     // mapping (see hapDatabase).
     characteristicFromUuid: (uuid) =>

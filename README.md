@@ -2,11 +2,24 @@
 
 Pairs HomeKit Bluetooth sensors and exposes them over Matter to Alexa, Google Home, SmartThings or IKEA Dirigera.
 
-Some sensors only speak HomeKit over Bluetooth (for example the Qingping Temp & RH Monitor **H version, CGG1H**), so only Apple Home can use them. This plugin pairs with such devices the way Apple Home would, reads their values, and exposes each one as a Matter device through Homebridge's Matter bridge. Add as many sensors as you like, of any supported kind.
+Some sensors only speak HomeKit over Bluetooth (for example the Qingping Temp & RH Monitor **H version, CGG1H**), so only Apple Home can use them. This plugin pairs with such devices the way Apple Home would, reads their values, and exposes each one as a Matter device through Homebridge's Matter bridge. Plugs, lights, locks, blinds, fans, thermostats and valves can be controlled from the Matter controller as well. Add as many devices as you like, of any supported kind.
 
-## Supported sensors
+## Supported devices
 
-Read-only HomeKit Bluetooth sensors. Controllable devices (plugs, lights, locks, blinds) are out of scope.
+### Controllable devices
+
+| HomeKit service | Matter device | Notes |
+|---|---|---|
+| Outlet, Switch | On/Off Plug-in Unit | On/off |
+| Lightbulb | On/Off, Dimmable, Color Temperature or Extended Color Light | Whatever the light has: on/off, brightness, colour temperature, hue and saturation. A colour sent as xy is converted to hue and saturation |
+| Lock Mechanism | Door Lock | Lock and unlock; jammed shows as not fully locked |
+| Window Covering, Window, Door | Window Covering | Position, open, close and stop |
+| Fan, Air Purifier | Fan | On/off and speed, in Matter's percentages and its low/medium/high steps |
+| Thermostat | Thermostat | Off, heat, cool and auto; the target temperature, or in auto the heating and cooling thresholds |
+| Heater Cooler | Room Air Conditioner | On/off, heat, cool and auto, with the thresholds the device has |
+| Valve, Faucet | Water Valve | Open and close |
+
+### Sensors
 
 | HomeKit service | Matter device | Notes |
 |---|---|---|
@@ -20,7 +33,7 @@ Read-only HomeKit Bluetooth sensors. Controllable devices (plugs, lights, locks,
 | Buttons (stateless switches) | Generic Switch | Single, double and long press; one switch per button. Needs fast updates, which are on by themselves for a device with buttons |
 | Battery | Power Source on the device | Level, low battery, "replacement needed" |
 
-A device with several kinds of sensors (e.g. motion plus light) becomes one Matter device with the main sensor first and the others as parts; a service the device has twice (e.g. two temperature sensors) becomes its own part.
+A device with several kinds of services (e.g. motion plus light, or a light with a temperature sensor) becomes one Matter device with the main one first and the others as parts; what a device controls comes before what it measures. A service the device has twice (e.g. a power strip's two outlets) becomes its own part.
 
 ## Requirements
 
@@ -47,7 +60,7 @@ A device with several kinds of sensors (e.g. motion plus light) becomes one Matt
      ]
    }
    ```
-5. Restart. The plugin pairs with each device, reads its structure and registers one Matter device per sensor. Add the bridge to your Matter controller with the code from the child bridge's Matter settings; sensors added later show up there by themselves.
+5. Restart. The plugin pairs with each device, reads its structure and registers one Matter device for each. Add the bridge to your Matter controller with the code from the child bridge's Matter settings; sensors added later show up there by themselves.
 
 The pairing keys are stored in `<Homebridge storage>/homekit-ble-matter/`, one file per device. Keep that folder: without it a device has to be factory-reset before it can be paired again (and gets a new DeviceID).
 
@@ -64,10 +77,14 @@ The pairing keys are stored in `<Homebridge storage>/homekit-ble-matter/`, one f
 | `timeout` | `60` | Minutes without a successful read before the device is reported as not responding; it keeps its last values (also per device). |
 | `devices[].temperatureOffset` | `0` | Added to the measured temperature in °C, e.g. `-0.5` for a sensor that reads half a degree too high. |
 | `devices[].humidityOffset` | `0` | Added to the measured humidity in percentage points, e.g. `3` for a sensor that reads 3 % too low. |
+| `devices[].keepConnected` | `true` | For a controllable device: stay connected, so commands take effect within about a second and changes made at the device show up at once. Turn it off for a battery-powered device (e.g. a lock): each command then connects first, which takes several seconds. |
 | `devices[].removePairing` | `false` | Removes this plugin's pairing from the device, so it can go back to Apple Home (see below). |
 | `bluetoothAdapter` | first adapter | The Bluetooth adapter to use, e.g. `hci1` for a USB dongle of its own. |
 
 ## How it works
+
+- **Controllable devices stay connected.** A Bluetooth connection takes seconds to set up, too long for switching a light, so the plugin keeps one open to each plug, light or lock (`keepConnected`). A command from the Matter controller goes out on it and the device confirms it, usually within a second; a change made at the device itself (a button on the plug) arrives the moment it happens. A command that the device refuses, or that doesn't finish within 15 seconds, is reported to the controller as failed. A dropped connection is reopened as soon as the device is heard again, waiting a little longer after each failed attempt (5 s, 15 s, 1 min, then every 5 min).
+- Values and commands are addressed by each characteristic's HomeKit instance ID, so two services of the same kind (a power strip's outlets) never get mixed up. A characteristic the device protects with HomeKit's timed write (locks) gets one.
 
 - One Bluetooth scan listens to all HomeKit advertisements. When a device's advertised state number changes (HomeKit devices bump it when a value changes), it's read, at most once every 5 minutes - or every 30 seconds for a device reporting events (contact, motion, occupancy, leak, smoke, CO, CO₂ alarm), where 5 minutes late would be useless. On top of that it's polled every `pollInterval` minutes; a poll is skipped when a read in the last 5 minutes (at most half the poll interval) already fetched the values.
 - **Fast updates** (`fastUpdates`): HomeKit devices can announce a changed value in an encrypted advertisement that only their paired controller can read. With fast updates on, the plugin asks the device for its broadcast key once (one extra connection), enables the announcements for every reading that supports them, and applies each change the moment it's heard - no connection, seconds instead of minutes. Devices without support say so once in the log and keep working as before. The underlying library doesn't implement this ([hap-controller#43](https://github.com/Apollon77/hap-controller-node/issues/43)); the plugin does it itself.
@@ -96,9 +113,14 @@ The pairing keys are stored in `<Homebridge storage>/homekit-ble-matter/`, one f
 - **"Already paired with another HomeKit controller":** remove the device from Apple Home first.
 - **"Bluetooth via BlueZ (D-Bus) is not available":** start the bluetooth service (`sudo systemctl start bluetooth`) and make sure the Homebridge user is in the `bluetooth` group.
 - **Reads keep failing:** turn on debug logging for the child bridge. Every connection then logs the signal strength and when the device was last heard, e.g. `Connecting (RSSI -78 dBm, heard 2s ago)`. Connections tend to become unreliable below about -85 dBm; moving the device and the Bluetooth adapter closer together helps.
+- **Commands fail or are slow:** the log says why (`Couldn't set ...`, e.g. the device refused or didn't answer in time). With debug logging on, `Connected; staying connected` and `Connection closed; reconnecting` show the kept connection. A device with `keepConnected` off connects for each command, which takes several seconds; a weak signal makes connections fail, as with reads.
 - **"Not seen since startup":** the device is out of range, out of battery, or was factory-reset and has a new DeviceID (the warning names the likely one).
 
 ## Known limitations
+
+- **Not supported:** garage door openers, security systems, humidifiers and dehumidifiers, televisions and speakers: Matter has no matching device type that Homebridge offers, or the controllers don't support it. An irrigation system's valves work as valves.
+- A kept connection occupies the Bluetooth adapter: other devices are still read, but take turns with it. With many controllable devices on one adapter, a second adapter (`bluetoothAdapter`) helps.
+- HomeKit thermostats have one target temperature outside auto mode; Matter shows it as both the heating and the cooling setpoint.
 
 - **A temperature+humidity device is rebuilt at each Homebridge start**, logged as `Restored accessory … changed structure - re-registering`: Homebridge's cache keeps only a device's base type, without the humidity measurement. From Homebridge 2.5.0 the rebuilt device keeps its Matter `uniqueId`, so controllers see the same device. On 2.4 it gets a new one ([homebridge/homebridge#4018](https://github.com/homebridge/homebridge/issues/4018)); IKEA Dirigera keeps the device, name and room either way.
 - **Bluetooth is shared** with any other Bluetooth plugin on the same adapter. The plugin works alongside other scanning plugins; on a busy adapter a connection can fail now and then, and a failed read is retried after a minute. A second adapter (`bluetoothAdapter`) avoids that.

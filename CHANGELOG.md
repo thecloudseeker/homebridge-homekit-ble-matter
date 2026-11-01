@@ -1,4 +1,12 @@
 # Changelog
+## 0.3.0
+
+* **Controllable devices.** Plugs and switches, lights (on/off, brightness, colour temperature, colour), locks, blinds, windows and doors, fans and air purifiers, thermostats, air conditioners (heater/coolers), and valves and faucets become the matching Matter devices, and Matter controllers can control them.
+* **They stay connected** (`keepConnected`, on by default): a command takes effect within about a second, and a change made at the device shows up the moment it happens. A dropped connection is reopened once the device is heard again. Turn it off for a battery-powered device: each command then connects first.
+* A command the device refuses, or that doesn't finish within 15 seconds, is reported to the controller as failed, and logged.
+* Values are addressed by each characteristic's HomeKit instance ID, so two services of the same kind (a power strip's outlets) are never mixed up. Characteristics protected by HomeKit's timed write (locks) get one.
+* The log names what kind of accessory it found (`Found HomeKit Bluetooth light ...`).
+
 ## 0.2.5
 
 * Fixed: on a system where D-Bus runs but the Bluetooth service doesn't, the child bridge could crash at startup instead of saying that Bluetooth isn't available. The D-Bus library reported BlueZ's quick "not there" answer as an unhandled error when it arrived before its own setup had finished. That also made CI fail now and then.
