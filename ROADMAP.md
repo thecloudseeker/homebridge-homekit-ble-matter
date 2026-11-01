@@ -90,9 +90,20 @@ Same code as 0.1.0-beta.11, released after two days of real use:
   to, so a peripheral left in `error` after a failed connect stayed stuck
   and every failed attempt waited 30s. Report upstream; drop both
   workarounds once fixed.
-- [ ] **New Matter `uniqueId` on every restart**
+- [x] **New Matter `uniqueId` on every restart**
   ([homebridge/homebridge#4018](https://github.com/homebridge/homebridge/issues/4018)):
-  Homebridge's to fix. For 1.0 it's enough that the README states the limitation.
+  fixed in Homebridge 2.5.0, which keeps the uniqueId of a re-registered
+  device. Tested against 2.5.0 (`test/homebridgeMatterRestart.test.js`).
+- [ ] **Temperature+humidity device rebuilt at every start**: Homebridge's
+  cache stores a device type as `{name, code}`, so the humidity behavior the
+  plugin composes onto TemperatureSensor is lost and the shape check
+  re-registers it. Harmless since 2.5.0 (same uniqueId and endpoint). Fix
+  upstream: cache the composed behavior ids.
+- [x] **Wait after registering** (`lib/platform.js`): Homebridge 2.5.0
+  resolves register/unregister once the bridge has finished
+  ([homebridge/homebridge#4033](https://github.com/homebridge/homebridge/pull/4033)),
+  so the 3-second wait only applies on 2.4. Remove it entirely once the
+  minimum Homebridge is 2.5.
 
 ## 1.0.0 — criteria
 

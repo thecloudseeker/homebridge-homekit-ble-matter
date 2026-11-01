@@ -1,4 +1,9 @@
 # Changelog
+## 0.2.4
+
+* **Homebridge 2.5.0** is supported and tested, including a restart: a temperature+humidity device keeps its Matter identity, so controllers see the same device.
+* On Homebridge 2.5.0 and later, a device's first values and name are sent the moment it's registered, instead of 3 seconds later. Homebridge 2.4 keeps the wait it needs.
+
 ## 0.2.3
 
 * The license is BSD-3-Clause instead of MIT, like the other plugins.

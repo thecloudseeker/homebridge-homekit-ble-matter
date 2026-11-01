@@ -100,7 +100,7 @@ The pairing keys are stored in `<Homebridge storage>/homekit-ble-matter/`, one f
 
 ## Known limitations
 
-- **New Matter `uniqueId` after each restart** for temperature+humidity devices, due to a Homebridge limitation ([homebridge/homebridge#4018](https://github.com/homebridge/homebridge/issues/4018)): Homebridge's cache keeps only a device's base type, so the combined endpoint is rebuilt at startup, logged as `Restored accessory … changed structure - re-registering`. IKEA Dirigera keeps the device, name and room across restarts.
+- **A temperature+humidity device is rebuilt at each Homebridge start**, logged as `Restored accessory … changed structure - re-registering`: Homebridge's cache keeps only a device's base type, without the humidity measurement. From Homebridge 2.5.0 the rebuilt device keeps its Matter `uniqueId`, so controllers see the same device. On 2.4 it gets a new one ([homebridge/homebridge#4018](https://github.com/homebridge/homebridge/issues/4018)); IKEA Dirigera keeps the device, name and room either way.
 - **Bluetooth is shared** with any other Bluetooth plugin on the same adapter. The plugin works alongside other scanning plugins; on a busy adapter a connection can fail now and then, and a failed read is retried after a minute. A second adapter (`bluetoothAdapter`) avoids that.
 - Without `fastUpdates` (or on a device that doesn't support it), changes are picked up by the advertised state number plus polling: seconds to minutes, not instant.
 

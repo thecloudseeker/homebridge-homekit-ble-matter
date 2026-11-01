@@ -79,3 +79,49 @@ test("a device with parts survives a Homebridge restart, with its last values", 
     await second?.stop();
   }
 });
+
+test("a temperature and humidity sensor keeps its Matter identity across a Homebridge restart", async () => {
+  const capabilities = ["batteryLevel", "humidity", "temperature"];
+  const readings = { temperature: 20.2, humidity: 56, batteryLevel: 55 };
+  const first = await startRealMatter();
+  let second;
+  try {
+    const sensor = build(first.matter, capabilities);
+    await first.matter.registerPlatformAccessories(
+      PLUGIN,
+      PLATFORM,
+      sensor.toAccessories(),
+    );
+    sensor.markRegistered();
+    await sensor.update(readings);
+    const before = await first.matter.getAccessoryState(
+      sensor.accessory.UUID,
+      "bridgedDeviceBasicInformation",
+    );
+    await first.stop({ keep: true });
+
+    second = await startRealMatter({ base: first.base });
+    const again = build(second.matter, capabilities, readings);
+    await second.matter.registerPlatformAccessories(
+      PLUGIN,
+      PLATFORM,
+      again.toAccessories(),
+    );
+    again.markRegistered();
+    await again.update({ humidity: 57 });
+
+    const state = (cluster) =>
+      second.matter.getAccessoryState(again.accessory.UUID, cluster);
+    assert.equal(
+      (await state("bridgedDeviceBasicInformation")).uniqueId,
+      before.uniqueId,
+    );
+    assert.equal(
+      (await state("relativeHumidityMeasurement")).measuredValue,
+      5700,
+    );
+    assert.equal((await state("temperatureMeasurement")).measuredValue, 2020);
+  } finally {
+    await second?.stop();
+  }
+});

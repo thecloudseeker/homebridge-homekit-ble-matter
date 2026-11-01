@@ -15,13 +15,27 @@ const {
   flush,
 } = require("./helpers/fakeHap");
 
+// "2.5.0" ≥ "2.4.0", as Homebridge's semver.gte for release versions.
+function versionAtLeast(version, minimum) {
+  const parts = (v) => v.split(".").map(Number);
+  const [a, b] = [parts(version), parts(minimum)];
+  for (let i = 0; i < 3; i += 1) {
+    if (a[i] !== b[i]) {
+      return a[i] > b[i];
+    }
+  }
+  return true;
+}
+
 class FakeAPI extends EventEmitter {
-  constructor({ matterEnabled = true, storagePath }) {
+  constructor({ matterEnabled = true, storagePath, serverVersion = "2.4.0" }) {
     super();
     this.matter = createFakeMatter();
     this.isMatterAvailable = () => true;
     this.isMatterEnabled = () => matterEnabled;
-    this.versionGreaterOrEqual = () => true;
+    this.serverVersion = serverVersion;
+    this.versionGreaterOrEqual = (minimum) =>
+      versionAtLeast(serverVersion, minimum);
     this.user = { storagePath: () => storagePath };
   }
 }
@@ -38,6 +52,7 @@ function setup(
     stored = {},
     // Extra members of the hap object, e.g. disconnectLeftovers.
     hapExtras = {},
+    serverVersion,
   } = {},
 ) {
   t.mock.timers.enable({ apis: ["setTimeout", "setInterval", "Date"] });
@@ -58,7 +73,7 @@ function setup(
       configureBroadcasts,
     },
   );
-  const api = new FakeAPI({ matterEnabled, storagePath });
+  const api = new FakeAPI({ matterEnabled, storagePath, serverVersion });
   const { log, lines } = createRecordingLog();
   const platform = new HomeKitBleMatterPlatform(
     log,
@@ -423,6 +438,18 @@ test("after registration, state is only sent once Homebridge had time to finish 
     clusters.includes("bridgedDeviceBasicInformation"),
     "then the name",
   );
+});
+
+test("on Homebridge 2.5.0, state is sent as soon as registration resolves", async (t) => {
+  const { platform, api, device } = setup(t, { serverVersion: "2.5.0" });
+  api.emit("didFinishLaunching");
+  platform.discovery.emit("serviceUp", advertisement(device));
+  await flush();
+
+  assert.equal(api.matter.accessories.size, 1);
+  const clusters = api.matter.stateUpdates.map((u) => u.cluster);
+  assert.ok(clusters.includes("temperatureMeasurement"));
+  assert.ok(clusters.includes("bridgedDeviceBasicInformation"));
 });
 
 test("pausing leaves no scanStop listener behind, even when no scanStop comes", async (t) => {
