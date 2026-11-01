@@ -4,9 +4,10 @@
 is stable, and every known rough edge is either fixed or knowingly accepted and
 documented.
 
-**Where we are (0.2.1):** one Qingping CGG1H, paired and exposed to IKEA
-Dirigera over Matter, on a Raspberry Pi 5 (Homebridge 2.4.0), sharing the
-Bluetooth adapter with two other BLE plugins. Running since 2026-09-26.
+**Where we are (0.2.4):** one Qingping CGG1H, paired and exposed over Matter
+to IKEA Dirigera and Apple Home, on a Raspberry Pi 5, sharing the Bluetooth
+adapter with two other BLE plugins. Running since 2026-09-26. Only the weeks of
+unattended running are left for 1.0.
 
 ## 0.1.0 — first stable release (released)
 
@@ -84,6 +85,12 @@ Same code as 0.1.0-beta.11, released after two days of real use:
 - [ ] **Move to the fork's current line (0.11.x).** noble 2.8.0 asks for
   dbus-next `^0.10.0`, so npm would install the original next to a newer
   fork and noble would use the original. Needs noble to widen that range.
+- [ ] **Proxy object setup order** (`orderProxyObjectInit` in `lib/hap.js`):
+  dbus-next's `getProxyObject` attaches its handler to the Introspect call
+  only after the bus's AddMatch is answered, so a fast failure (no BlueZ)
+  is briefly unhandled and ends the process. Report upstream to
+  `@jellybrick/dbus-next` (attach the handler at once); drop the
+  workaround once fixed.
 - [ ] **Stale connection state reset** (`releaseStalePeripheral` in `lib/hap.js`):
   plus the patched `disconnect` in the D-Bus guard: noble 2.8.0's D-Bus
   binding never completes a disconnect for a device it holds no connection
@@ -108,10 +115,10 @@ Same code as 0.1.0-beta.11, released after two days of real use:
 ## 1.0.0 — criteria
 
 - [ ] **2–4 weeks** of continuous operation without manual intervention
-- [ ] Tested with **two Matter controllers** (IKEA Dirigera plus Apple Home or Google Home)
+- [x] Tested with **two Matter controllers**: IKEA Dirigera and Apple Home
 - [x] Pairing removal and adapter selection shipped; no configuration changes planned
-- [ ] README covers supported devices, setup, troubleshooting and known limitations
-- [ ] Scope stated: **read-only HomeKit Bluetooth sensors**.
+- [x] README covers supported devices, setup, troubleshooting and known limitations
+- [x] Scope stated: **read-only HomeKit Bluetooth sensors**.
 
 Optional around 1.0: apply for **Homebridge Verified** (config schema, no
 postinstall scripts, proper error handling — mostly in place already).

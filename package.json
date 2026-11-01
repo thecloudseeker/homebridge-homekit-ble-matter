@@ -1,8 +1,8 @@
 {
   "name": "@thecloudseeker/homebridge-homekit-ble-matter",
   "displayName": "HomeKit BLE Matter",
-  "version": "0.2.4",
-  "description": "Homebridge plugin that pairs with HomeKit-over-Bluetooth sensors (temperature, humidity, contact, leak, motion, light, smoke/CO, air quality, buttons) and exposes them over Matter (IKEA Dirigera, Google Home, Alexa, SmartThings…)",
+  "version": "0.2.5",
+  "description": "Pairs HomeKit Bluetooth sensors and exposes them over Matter to Alexa, Google Home, SmartThings or IKEA Dirigera.",
   "main": "index.js",
   "scripts": {
     "lint": "eslint .",

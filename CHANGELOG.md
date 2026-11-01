@@ -1,4 +1,8 @@
 # Changelog
+## 0.2.5
+
+* Fixed: on a system where D-Bus runs but the Bluetooth service doesn't, the child bridge could crash at startup instead of saying that Bluetooth isn't available. The D-Bus library reported BlueZ's quick "not there" answer as an unhandled error when it arrived before its own setup had finished. That also made CI fail now and then.
+
 ## 0.2.4
 
 * **Homebridge 2.5.0** is supported and tested, including a restart: a temperature+humidity device keeps its Matter identity, so controllers see the same device.

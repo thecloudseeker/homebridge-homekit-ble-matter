@@ -318,3 +318,64 @@ test("parseAccessoryDatabase finds buttons (which can't be read) and the status 
     { button: 11, "button.2": 21, motion: 31, active: 32, tampered: 33 },
   );
 });
+
+// A real dbus-next MessageBus on a fake connection: the bus's own setup
+// (AddMatch) is answered after 50 ms, while a call to org.bluez fails at once,
+// as on a host whose system bus runs without BlueZ.
+function busWithoutBluez() {
+  const dbus = require("dbus-next");
+  const MessageBus = require("dbus-next/lib/bus");
+  const { EventEmitter } = require("events");
+  const connection = new EventEmitter();
+  connection.message = (msg) => {
+    if (msg.member === "AddMatch") {
+      setTimeout(
+        () => connection.emit("message", dbus.Message.newMethodReturn(msg)),
+        50,
+      );
+    } else if (msg.destination === "org.bluez") {
+      setImmediate(() =>
+        connection.emit(
+          "message",
+          dbus.Message.newError(
+            msg,
+            "org.freedesktop.DBus.Error.ServiceUnknown",
+            "The name org.bluez was not provided by any .service files",
+          ),
+        ),
+      );
+    }
+  };
+  const bus = new MessageBus(connection);
+  bus.name = ":1.1";
+  return { bus, MessageBus };
+}
+
+test("a fast D-Bus failure on the first proxy object rejects the call, never unhandled", async () => {
+  const { bus, MessageBus } = busWithoutBluez();
+  const { orderProxyObjectInit } = require("../lib/hap");
+  orderProxyObjectInit(MessageBus);
+
+  const unhandled = [];
+  const onUnhandled = (error) => unhandled.push(error);
+  process.on("unhandledRejection", onUnhandled);
+  try {
+    await assert.rejects(
+      bus.getProxyObject("org.bluez", "/"),
+      /org\.bluez was not provided/,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  } finally {
+    process.off("unhandledRejection", onUnhandled);
+  }
+  assert.deepEqual(unhandled, []);
+});
+
+test("ordering the proxy object setup is applied once", () => {
+  const MessageBus = require("dbus-next/lib/bus");
+  const { orderProxyObjectInit } = require("../lib/hap");
+  orderProxyObjectInit(MessageBus);
+  const once = MessageBus.prototype.getProxyObject;
+  orderProxyObjectInit(MessageBus);
+  assert.equal(MessageBus.prototype.getProxyObject, once);
+});

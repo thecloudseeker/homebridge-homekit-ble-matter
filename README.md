@@ -1,6 +1,6 @@
 # homebridge-homekit-ble-matter
 
-Brings **HomeKit-only Bluetooth sensors** to **Matter** controllers such as IKEA Dirigera, Google Home, Amazon Alexa or SmartThings.
+Pairs HomeKit Bluetooth sensors and exposes them over Matter to Alexa, Google Home, SmartThings or IKEA Dirigera.
 
 Some sensors only speak HomeKit over Bluetooth (for example the Qingping Temp & RH Monitor **H version, CGG1H**), so only Apple Home can use them. This plugin pairs with such devices the way Apple Home would, reads their values, and exposes each one as a Matter device through Homebridge's Matter bridge. Add as many sensors as you like, of any supported kind.
 
