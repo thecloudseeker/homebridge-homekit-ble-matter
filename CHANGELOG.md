@@ -1,4 +1,8 @@
 # Changelog
+## 0.2.3
+
+* The license is BSD-3-Clause instead of MIT, like the other plugins.
+
 ## 0.2.2
 
 * The author link on npm points to [eikedreier.com](https://eikedreier.com/).
