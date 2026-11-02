@@ -1,4 +1,8 @@
 # Changelog
+## 0.3.1
+
+* Fixed: when a device answered a read without one of its values, the values after it could end up on the wrong readings (e.g. the battery level shown as the humidity). Values are now matched by each characteristic's HomeKit instance ID.
+
 ## 0.3.0
 
 * **Controllable devices.** Plugs and switches, lights (on/off, brightness, colour temperature, colour), locks, blinds, windows and doors, fans and air purifiers, thermostats, air conditioners (heater/coolers), and valves and faucets become the matching Matter devices, and Matter controllers can control them.

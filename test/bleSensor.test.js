@@ -1288,3 +1288,25 @@ test("a sensor that says it isn't working is reported as not responding until it
   assert.deepEqual(states, [false, true]);
   assert.ok(lines.info.some((l) => l.includes("working again")));
 });
+
+test("a value the device leaves out of its answer doesn't shift the others onto the wrong readings", async (t) => {
+  const device = createFakeDevice();
+  const { sensor, readings } = setup(t, {
+    device,
+    store: storeFromPreviousRun(device),
+  });
+  sensor.state.database.batteryLevel = {
+    serviceUuid: "svc-bat",
+    characteristicUuid: "ch-batlevel",
+    iid: 59,
+    format: "uint8",
+  };
+  device.noValue = [257]; // temperature: answered without a value
+  sensor.handleAdvertisement(advertisement(device));
+  await flush();
+
+  const last = readings.at(-1);
+  assert.equal(last.temperature, undefined);
+  assert.equal(last.humidity, 60.5, "not the temperature's neighbour");
+  assert.equal(last.batteryLevel, 86);
+});

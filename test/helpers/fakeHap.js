@@ -315,11 +315,15 @@ function createFakeHap(deviceOrDevices, { withNoble = false } = {}) {
         device.failNextReads -= 1;
         throw device.readError ?? "Timeout";
       }
+      // Like hap-controller: a characteristic the device answered without
+      // a value is left out of the list (`device.noValue`: those iids).
       return {
-        characteristics: list.map((address) => ({
-          iid: address.iid,
-          value: device.values[address.iid],
-        })),
+        characteristics: list
+          .filter((address) => !device.noValue?.includes(address.iid))
+          .map((address) => ({
+            iid: address.iid,
+            value: device.values[address.iid],
+          })),
       };
     }
     async close() {
