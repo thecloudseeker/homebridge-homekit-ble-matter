@@ -1,4 +1,8 @@
 # Changelog
+## 0.3.2
+
+* Fixed: the child bridge could crash and restart when a device dropped out of Bluetooth range right after being heard (`interface not found in proxy object: org.freedesktop.DBus.Properties`). The device is now picked up again the next time it's heard.
+
 ## 0.3.1
 
 * Fixed: when a device answered a read without one of its values, the values after it could end up on the wrong readings (e.g. the battery level shown as the humidity). Values are now matched by each characteristic's HomeKit instance ID.

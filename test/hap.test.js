@@ -444,3 +444,36 @@ test("parseAccessoryDatabase keys controllable characteristics by service, numbe
   assert.equal(iid("fanActive"), 61);
   assert.equal(iid("fanSpeed"), 62);
 });
+
+test("a device BlueZ removes while it's being watched doesn't end the process", async () => {
+  const DbusBindings = require("@stoprocent/noble/lib/dbus/bindings");
+  const { guardDbusBinding } = require("../lib/hap");
+  const bindings = new DbusBindings();
+  bindings._adapterPath = "/org/bluez/hci0";
+  bindings._isScanning = true;
+  // Introspecting a removed object finds no interfaces.
+  bindings._bus = {
+    async getProxyObject() {
+      return {
+        getInterface(name) {
+          throw new Error(`interface not found in proxy object: ${name}`);
+        },
+      };
+    },
+  };
+  guardDbusBinding({ _bindings: bindings, emit() {} });
+
+  const unhandled = [];
+  const onUnhandled = (error) => unhandled.push(error);
+  process.on("unhandledRejection", onUnhandled);
+  try {
+    bindings._onInterfacesAdded("/org/bluez/hci0/dev_E4_AA_EC_00_00_01", {
+      "org.bluez.Device1": { Address: "E4:AA:EC:00:00:01", RSSI: -90 },
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  } finally {
+    process.off("unhandledRejection", onUnhandled);
+  }
+  assert.deepEqual(unhandled, []);
+  assert.equal(bindings._scanPropsListeners.size, 0, "watched again later");
+});

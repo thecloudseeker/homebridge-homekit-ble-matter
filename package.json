@@ -1,7 +1,7 @@
 {
   "name": "@thecloudseeker/homebridge-homekit-ble-matter",
   "displayName": "HomeKit BLE Matter",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Pairs HomeKit Bluetooth sensors, plugs, lights and locks and exposes them over Matter to Alexa, Google Home, SmartThings or IKEA Dirigera.",
   "main": "index.js",
   "scripts": {
